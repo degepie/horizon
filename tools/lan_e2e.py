@@ -8189,5 +8189,50 @@ CHECKS += ['dig_sounds']
 CHECK_FNS['dig_sounds'] = check_dig_sounds
 
 
+def check_anchor_glowstone(host, guest, out):
+    """#3018: glowstone right-clicked on a respawn anchor with room charges it
+    (RespawnAnchorBlock.useItemOn) from either hand, and the clicking client never
+    predicts a glowstone block placed on top (its place sound gave the ghost away)."""
+    result = {}
+    spots = apart(host, guest)
+    place = 'minecraft:block.glass.place'
+    charge = 'minecraft:block.respawn_anchor.charge'
+    for label, player in (('host', host), ('guest', guest)):
+        x, y, z = spots[label]
+        cell, above = (x, y, z + 2), (x, y + 1, z + 2)
+        for hand in ('mainhand', 'offhand'):
+            player('command', command='gamemode survival')
+            player('command', command='clear @s')
+            player('command', command=f'item replace entity @s weapon.{hand} with minecraft:glowstone 16')
+            host('command', command=f'setblock {cell[0]} {cell[1]} {cell[2]} minecraft:respawn_anchor')
+            player.wait(10)
+            player.raw('look-at', f'{x + 0.5:.2f}', f'{y + 1:.2f}', f'{z + 2.5:.2f}')
+            before = {s: heard(player, s) for s in (place, charge)}
+            clicks = 4 if hand == 'mainhand' else 1
+            for _ in range(clicks):
+                player.raw('mouse', 'right', 'click')
+                player.wait(6)
+            player.wait(10)
+            key = f'{label} {hand}'
+            result[key] = {
+                'anchor': [g.raw('block', *cell).get('state') for g in (host, guest)],
+                'above': [g.raw('block', *above).get('block') for g in (host, guest)],
+                'heard': {s: heard(player, s) - before[s] for s in (place, charge)},
+                'glowstone': server_count(player, 'glowstone'),
+            }
+            player.shot(out, f'anchor-glowstone-{hand}')
+            seen = result[key]
+            assert all(f'charges={clicks}' in (s or '') for s in seen['anchor']), f'{key}: {seen}'
+            assert seen['above'] == ['minecraft:air'] * 2, f'{key}: {seen}'
+            assert seen['heard'] == {place: 0, charge: clicks}, f'{key}: {seen}'
+            assert seen['glowstone'] == 16 - clicks, f'{key}: {seen}'
+        host('command', command=f'setblock {cell[0]} {cell[1]} {cell[2]} minecraft:air')
+    return result
+
+
+CHECKS += ['anchor_glowstone']
+CHECK_FNS['anchor_glowstone'] = check_anchor_glowstone
+
+
 if __name__ == '__main__':
     main()

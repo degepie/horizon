@@ -92,7 +92,7 @@ impl Game<'_> {
     pub(super) fn is_anchor(&self, state: BlockStateId) -> bool {
         &*self.res.facts().get(state).name == "minecraft:respawn_anchor"
     }
-    fn anchor_charges(&self, state: BlockStateId) -> i32 {
+    pub(super) fn anchor_charges(&self, state: BlockStateId) -> i32 {
         self.pack
             .assets
             .registry
@@ -101,7 +101,11 @@ impl Game<'_> {
             .and_then(|c| c.parse().ok())
             .unwrap_or(0)
     }
-    fn anchor_with_charges(&self, state: BlockStateId, charges: i32) -> Option<BlockStateId> {
+    pub(super) fn anchor_with_charges(
+        &self,
+        state: BlockStateId,
+        charges: i32,
+    ) -> Option<BlockStateId> {
         let mut s = self.pack.assets.registry.state(state)?.clone();
         s.properties.insert("charges".into(), charges.to_string());
         self.pack.assets.registry.resolve(&s).ok()
@@ -139,12 +143,8 @@ impl Game<'_> {
         held: Option<&ItemStack>,
     ) -> Result<AnchorUse> {
         let state = self.world.block(pos[0], pos[1], pos[2]);
-        if !self.is_anchor(state) {
-            return Ok(AnchorUse::Other);
-        }
-        let fuel = |s: Option<&ItemStack>| s.is_some_and(|s| &*s.item == "minecraft:glowstone");
-        let chargeable = self.anchor_charges(state) < 4;
-        if fuel(held) && chargeable {
+        let answer = self.anchor_use(pos, held, self.hand);
+        if let AnchorUse::Charged = answer {
             let used = held.cloned();
             self.charge_anchor(pos, state, Some(Who::Player))?;
             // itemStack.consume(1, player); the criterion sees the stack as used.
@@ -152,12 +152,31 @@ impl Game<'_> {
             if let Some(stack) = used {
                 self.trigger_block("minecraft:item_used_on_block", pos, &stack);
             }
-            return Ok(AnchorUse::Charged);
         }
-        if self.hand == Hand::Main && fuel(self.offhand.as_ref()) && chargeable {
-            return Ok(AnchorUse::Pass);
+        Ok(answer)
+    }
+    /// What `RespawnAnchorBlock.useItemOn` answers for `held` in `hand`,
+    /// changing nothing: a server's client asks it before predicting a
+    /// glowstone placement (`remote_use_item_on`).
+    pub(super) fn anchor_use(
+        &self,
+        pos: [i32; 3],
+        held: Option<&ItemStack>,
+        hand: Hand,
+    ) -> AnchorUse {
+        let state = self.world.block(pos[0], pos[1], pos[2]);
+        if !self.is_anchor(state) {
+            return AnchorUse::Other;
         }
-        Ok(AnchorUse::Other)
+        let fuel = |s: Option<&ItemStack>| s.is_some_and(|s| &*s.item == "minecraft:glowstone");
+        let chargeable = self.anchor_charges(state) < 4;
+        if fuel(held) && chargeable {
+            return AnchorUse::Charged;
+        }
+        if hand == Hand::Main && fuel(self.offhand.as_ref()) && chargeable {
+            return AnchorUse::Pass;
+        }
+        AnchorUse::Other
     }
     /// `RespawnAnchorBlock.useWithoutItem` on a charged anchor: outside the
     /// Nether it explodes; inside, it becomes the respawn point.

@@ -4772,6 +4772,35 @@ impl Game<'_> {
             if let Some(r) = self.remote.as_mut() {
                 r.use_target = Some(hit.pos);
             }
+            // RespawnAnchorBlock.useItemOn comes before useWithoutItem and the
+            // item's own use: glowstone charges an anchor that has room
+            // instead of being placed beside it, and the main hand passes
+            // while the off hand holds the glowstone. Sneaking with something
+            // in either hand skips the block.
+            use super::respawn_anchor::AnchorUse;
+            let hands_full = self.stack_in(self.selected).is_some() || self.offhand.is_some();
+            let anchor = if self.keys.contains(&KeyCode::ShiftLeft) && hands_full {
+                AnchorUse::Other
+            } else {
+                self.anchor_use(hit.pos, held.as_ref(), hand)
+            };
+            if let AnchorUse::Charged = anchor {
+                // RespawnAnchorBlock.charge on this client's level (kept as
+                // predicted until the server answers), then itemStack.consume;
+                // SUCCESS swings and ends the click. The charge sound is the
+                // server's.
+                let state = self.world.block(hit.pos[0], hit.pos[1], hit.pos[2]);
+                if let Some(next) = self.anchor_with_charges(state, self.anchor_charges(state) + 1)
+                {
+                    let at =
+                        horizon_core::position::BlockPos::new(hit.pos[0], hit.pos[1], hit.pos[2]);
+                    self.predict_blocks(&vec![(at, next)], seq);
+                }
+                self.with_hand(hand, Game::consume_held);
+                self.with_hand(hand, Game::swing_arm);
+                return true;
+            }
+            let reacts = reacts && !matches!(anchor, AnchorUse::Pass);
             if reacts {
                 self.predict_use(&changes, seq);
                 self.open_command_block_if_editable((hit.pos[0], hit.pos[1], hit.pos[2]));
