@@ -38,8 +38,9 @@ potion registry's id codec the same way. I could not check this against the 26.3
 Known difference: if a pack writes the same component as both `damage` and `minecraft:damage`, vanilla is
 expected to reject the duplicate key when it loads the pack, while Horizon uses the first match.
 
-No harness: the change is in advancement predicate matching, which the unit test covers; no parity harness drives
-item predicates with bare keys.
+No harness: no parity harness targets item-predicate component keys; the unit test is the check. Here
+`tools/parity.py --changed-files <advancements.rs> --list` selected 416 of 417 harnesses (no `.local/` records
+to narrow with), so CI's parity job decides which ones run.
 
 ## Other projects' code
 
