@@ -8,12 +8,13 @@
 //! maps are kept as found (structure search is not run); conditions that
 //! need an entity, tool or damage source fail when the context has none, as
 //! they do for containers.
+use crate::location_predicate::{self, PredicateWorld};
 use crate::{lazy_json::LazyJson, nbt::Tag};
 use horizon_core::random::{LegacyRandom, RandomSource};
 use serde_json::Value;
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs, io,
     path::Path,
     rc::Rc,
@@ -725,6 +726,11 @@ impl LootData {
             "instrument",
             "entity_type",
             "damage_type",
+            // What `location_check` predicates name.
+            "worldgen/biome",
+            "worldgen/structure",
+            "block",
+            "fluid",
         ] {
             let mut raw = HashMap::new();
             load_kind(&all, &format!("tags/{registry}"), &mut raw)?;
@@ -830,6 +836,7 @@ impl LootData {
         let mut c = Context {
             data: self,
             random: LegacyRandom::new(0),
+            origin: None,
             biome: None,
             visited: Vec::new(),
             luck: 0.0,
@@ -907,7 +914,7 @@ impl LootData {
         table: &str,
         random: &mut LegacyRandom,
         luck: f32,
-        biome: Option<&str>,
+        origin: Option<LootOrigin<'_>>,
         open_water: Option<bool>,
     ) -> Vec<LootStack> {
         let Some(json) = self.tables.get(table) else {
@@ -916,7 +923,8 @@ impl LootData {
         let mut c = Context {
             data: self,
             random: random.clone(),
-            biome,
+            origin,
+            biome: origin.and_then(|o| o.biome()),
             visited: Vec::new(),
             luck,
             open_water,
@@ -942,6 +950,7 @@ impl LootData {
         let mut c = Context {
             data: self,
             random: random.clone(),
+            origin: None,
             biome: None,
             visited: Vec::new(),
             luck: params.luck,
@@ -967,6 +976,7 @@ impl LootData {
         let mut c = Context {
             data: self,
             random: random.clone(),
+            origin: None,
             biome: None,
             visited: Vec::new(),
             luck: 0.0,
@@ -994,16 +1004,16 @@ impl LootData {
         }
     }
     /// LootTable.fill into an empty container of `slots` slots with
-    /// `RandomSource.create(seed)`; `biome` is the container's biome for
+    /// `RandomSource.create(seed)`; `origin` is where the container is, for
     /// location checks (None: no origin, checks fail).
     pub fn fill(
         &self,
         table: &str,
         seed: i64,
         slots: usize,
-        biome: Option<&str>,
+        origin: Option<LootOrigin<'_>>,
     ) -> Vec<Option<LootStack>> {
-        self.fill_with(table, &mut LegacyRandom::new(seed), slots, biome)
+        self.fill_with(table, &mut LegacyRandom::new(seed), slots, origin)
     }
     /// LootTable.fill drawing from `random` (a seeded random or the table's
     /// random sequence), which is advanced.
@@ -1012,7 +1022,7 @@ impl LootData {
         table: &str,
         random: &mut R,
         slots: usize,
-        biome: Option<&str>,
+        origin: Option<LootOrigin<'_>>,
     ) -> Vec<Option<LootStack>> {
         let mut out = vec![None; slots];
         let Some(json) = self.tables.get(table) else {
@@ -1021,7 +1031,8 @@ impl LootData {
         let mut c = Context {
             data: self,
             random: random.clone(),
-            biome,
+            origin,
+            biome: origin.and_then(|o| o.biome()),
             visited: Vec::new(),
             luck: 0.0,
             open_water: None,
@@ -1107,10 +1118,65 @@ fn shuffle_and_split(result: &mut Vec<LootStack>, slots: usize, random: &mut imp
     shuffle(result, random);
 }
 
+/// `LootContextParams.ORIGIN` and the level a roll's location checks ask
+/// about it.
+#[derive(Clone, Copy)]
+pub struct LootOrigin<'a> {
+    pub pos: [f64; 3],
+    pub world: &'a dyn PredicateWorld,
+}
+impl LootOrigin<'_> {
+    fn biome(&self) -> Option<String> {
+        self.world.biome([
+            self.pos[0].floor() as i32,
+            self.pos[1].floor() as i32,
+            self.pos[2].floor() as i32,
+        ])
+    }
+}
+/// The origin's world with the loot data's own tags: a tag the world does
+/// not know may be one the data (and its packs) bring.
+struct LootWorld<'a> {
+    data: &'a LootData,
+    world: &'a dyn PredicateWorld,
+}
+impl PredicateWorld for LootWorld<'_> {
+    fn dimension(&self) -> Option<&str> {
+        self.world.dimension()
+    }
+    fn biome(&self, pos: [i32; 3]) -> Option<String> {
+        self.world.biome(pos)
+    }
+    fn structures(&self, pos: [i32; 3]) -> Option<Vec<String>> {
+        self.world.structures(pos)
+    }
+    fn block(&self, pos: [i32; 3]) -> Option<(String, BTreeMap<String, String>)> {
+        self.world.block(pos)
+    }
+    fn fluid(&self, pos: [i32; 3]) -> Option<String> {
+        self.world.fluid(pos)
+    }
+    fn can_see_sky(&self, pos: [i32; 3]) -> Option<bool> {
+        self.world.can_see_sky(pos)
+    }
+    fn light(&self, pos: [i32; 3]) -> Option<i32> {
+        self.world.light(pos)
+    }
+    fn smokey(&self, pos: [i32; 3]) -> Option<bool> {
+        self.world.smokey(pos)
+    }
+    fn in_tag(&self, registry: &str, tag: &str, id: &str) -> bool {
+        self.data.in_tag(registry, tag, id) || self.world.in_tag(registry, tag, id)
+    }
+}
+
 struct Context<'a, R> {
     data: &'a LootData,
     random: R,
-    biome: Option<&'a str>,
+    /// `ORIGIN` and the level around it (None: no origin, location checks fail).
+    origin: Option<LootOrigin<'a>>,
+    /// The origin's biome, for a mod's own loot kinds.
+    biome: Option<String>,
     visited: Vec<String>,
     /// LootContext.getLuck.
     luck: f32,
@@ -1364,20 +1430,23 @@ impl<R: RandomSource> Context<'_, R> {
                     let chance = self.float(&c["chance"]);
                     self.random.next_float() < chance
                 }
+                // LocationCheck.test: the predicate at the origin moved by
+                // the whole-block offset; no origin fails.
                 "minecraft:location_check" => {
-                    let Some(biome) = self.biome else {
+                    let Some(origin) = self.origin else {
                         return false;
                     };
-                    match &c["predicate"]["biomes"] {
-                        Value::Null => true,
-                        Value::String(s) => match s.strip_prefix('#') {
-                            // Biome tags are not loaded here.
-                            Some(_) => false,
-                            None => s == biome,
-                        },
-                        Value::Array(a) => a.iter().any(|b| b.as_str() == Some(biome)),
-                        _ => false,
-                    }
+                    let offset = |k: &str| c[k].as_i64().unwrap_or(0) as f64;
+                    let at = [
+                        origin.pos[0] + offset("offsetX"),
+                        origin.pos[1] + offset("offsetY"),
+                        origin.pos[2] + offset("offsetZ"),
+                    ];
+                    let world = LootWorld {
+                        data,
+                        world: origin.world,
+                    };
+                    location_predicate::location(&c["predicate"], at, &world)
                 }
                 // A mod's own kind: the hook answers; a bare type name is
                 // minecraft's own and an unknown one fails.
@@ -1422,7 +1491,7 @@ impl<R: RandomSource> Context<'_, R> {
             tool: None, // The tool is not in this engine's context.
             block: None,
             luck: self.luck,
-            biome: self.biome,
+            biome: self.biome.as_deref(),
             seed,
             place: current_native_loot_place(),
         }
@@ -1574,7 +1643,7 @@ impl<R: RandomSource> Context<'_, R> {
             // (it drops the map when nothing is found, as the filtered
             // map_id check after it would).
             "minecraft:exploration_map" => {
-                stack.map = self.biome.is_some();
+                stack.map = self.origin.is_some();
                 if stack.map {
                     stack.exploration = Some(Box::new(ExplorationMap::from_json(f)));
                 }
@@ -2294,5 +2363,188 @@ mod recipe_result_tests {
         assert_eq!(id(r#"{"id": 7}"#), None);
         assert_eq!(id("null"), None);
         assert_eq!(id("[]"), None);
+    }
+}
+
+#[cfg(test)]
+mod location_check_tests {
+    use super::*;
+    use crate::location_predicate::KnownBiome;
+
+    /// A table dropping one stone when `condition` holds, and a jungle
+    /// biome tag in the data.
+    fn table(name: &str, condition: &str) -> LootData {
+        let root = std::env::temp_dir().join(format!("loot-loc-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let dir = root.join("data/minecraft/loot_table");
+        fs::create_dir_all(&dir).unwrap();
+        let json = format!(
+            r#"{{"pools":[{{"rolls":1,"condition":[{condition}],
+                "entries":[{{"type":"minecraft:item","name":"minecraft:stone"}}]}}]}}"#
+        );
+        fs::write(dir.join("test.json"), json).unwrap();
+        let tags = root.join("data/minecraft/tags/worldgen/biome");
+        fs::create_dir_all(&tags).unwrap();
+        fs::write(
+            tags.join("is_jungle.json"),
+            r#"{"values": ["minecraft:jungle", "minecraft:bamboo_jungle"]}"#,
+        )
+        .unwrap();
+        fs::write(root.join("items.json"), "{}").unwrap();
+        let data = LootData::load(&root, &PackOverlay::NONE).unwrap();
+        let _ = fs::remove_dir_all(&root);
+        data
+    }
+
+    /// A jungle where the only log is at (0, 67, 0), lit 12.
+    struct Jungle;
+    impl PredicateWorld for Jungle {
+        fn dimension(&self) -> Option<&str> {
+            Some("minecraft:overworld")
+        }
+        fn biome(&self, _: [i32; 3]) -> Option<String> {
+            Some("minecraft:jungle".into())
+        }
+        fn structures(&self, _: [i32; 3]) -> Option<Vec<String>> {
+            Some(Vec::new())
+        }
+        fn block(&self, p: [i32; 3]) -> Option<(String, BTreeMap<String, String>)> {
+            let name = if p == [0, 67, 0] { "jungle_log" } else { "air" };
+            Some((format!("minecraft:{name}"), BTreeMap::new()))
+        }
+        fn fluid(&self, _: [i32; 3]) -> Option<String> {
+            None
+        }
+        fn can_see_sky(&self, _: [i32; 3]) -> Option<bool> {
+            Some(true)
+        }
+        fn light(&self, _: [i32; 3]) -> Option<i32> {
+            Some(12)
+        }
+        fn smokey(&self, _: [i32; 3]) -> Option<bool> {
+            Some(false)
+        }
+        fn in_tag(&self, _: &str, _: &str, _: &str) -> bool {
+            false
+        }
+    }
+
+    fn drops(data: &LootData, origin: Option<LootOrigin<'_>>) -> bool {
+        let mut random = LegacyRandom::new(1);
+        !data
+            .roll("minecraft:test", &mut random, 0.0, origin, None)
+            .is_empty()
+    }
+
+    const CENTRE: [f64; 3] = [0.5, 64.5, 0.5];
+
+    #[test]
+    fn without_an_origin_even_an_empty_predicate_fails() {
+        let data = table("none", r#"{"type":"minecraft:location_check"}"#);
+        assert!(!drops(&data, None));
+        let origin = LootOrigin {
+            pos: CENTRE,
+            world: &Jungle,
+        };
+        assert!(drops(&data, Some(origin)));
+    }
+
+    #[test]
+    fn the_offset_moves_the_tested_position_and_block() {
+        let origin = LootOrigin {
+            pos: CENTRE,
+            world: &Jungle,
+        };
+        let position = |dy: i32| {
+            table(
+                &format!("pos{dy}"),
+                &format!(
+                    r#"{{"type":"minecraft:location_check","offsetY":{dy},
+                        "predicate":{{"position":{{"y":{{"min":67.5,"max":67.5}}}}}}}}"#
+                ),
+            )
+        };
+        assert!(drops(&position(3), Some(origin)));
+        assert!(!drops(&position(2), Some(origin)));
+        let log = |dy: i32| {
+            table(
+                &format!("log{dy}"),
+                &format!(
+                    r#"{{"type":"minecraft:location_check","offsetY":{dy},
+                        "predicate":{{"block":{{"blocks":"minecraft:jungle_log"}}}}}}"#
+                ),
+            )
+        };
+        assert!(drops(&log(3), Some(origin)));
+        assert!(!drops(&log(0), Some(origin)));
+    }
+
+    #[test]
+    fn the_full_predicate_is_tested_not_only_the_biome() {
+        let origin = LootOrigin {
+            pos: CENTRE,
+            world: &Jungle,
+        };
+        for (name, predicate, expected) in [
+            ("dim", r#"{"dimension":"minecraft:the_nether"}"#, false),
+            ("light", r#"{"light":{"light":{"min":13}}}"#, false),
+            ("sky", r#"{"can_see_sky":true}"#, true),
+            ("smoke", r#"{"smokey":true}"#, false),
+            ("fluid", r#"{"fluid":{}}"#, false),
+            (
+                "struct",
+                r#"{"structures":"minecraft:jungle_pyramid"}"#,
+                false,
+            ),
+            (
+                "all",
+                r#"{"biomes":"minecraft:jungle","dimension":"minecraft:overworld",
+                    "light":{"light":12},"can_see_sky":true}"#,
+                true,
+            ),
+        ] {
+            let data = table(
+                name,
+                &format!(r#"{{"type":"minecraft:location_check","predicate":{predicate}}}"#),
+            );
+            assert_eq!(drops(&data, Some(origin)), expected, "{predicate}");
+        }
+    }
+
+    #[test]
+    fn biome_tags_resolve_through_the_loot_data_tags() {
+        let data = table(
+            "tag",
+            r##"{"type":"minecraft:location_check","predicate":{"biomes":"#minecraft:is_jungle"}}"##,
+        );
+        let bamboo = KnownBiome {
+            biome: "minecraft:bamboo_jungle",
+            dimension: None,
+        };
+        let desert = KnownBiome {
+            biome: "minecraft:desert",
+            dimension: None,
+        };
+        let at = |world| LootOrigin { pos: CENTRE, world };
+        assert!(drops(&data, Some(at(&bamboo))));
+        assert!(!drops(&data, Some(at(&desert))));
+        assert!(drops(&data, Some(at(&Jungle))));
+    }
+
+    #[test]
+    fn a_biome_only_origin_fails_what_it_cannot_tell() {
+        let data = table(
+            "known",
+            r#"{"type":"minecraft:location_check","predicate":{"block":{}}}"#,
+        );
+        let only = KnownBiome {
+            biome: "minecraft:jungle",
+            dimension: None,
+        };
+        let origin = LootOrigin {
+            pos: CENTRE,
+            world: &only,
+        };
+        assert!(!drops(&data, Some(origin)));
     }
 }

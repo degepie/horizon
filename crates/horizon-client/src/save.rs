@@ -864,7 +864,11 @@ fn roll_loaded_loot(
     }
     let loot = crate::structure_blocks::loaded_loot_data()?;
     let (x, y, z) = be.0;
-    let biome = &biomes.get(chunk.biome(x & 15, y, z & 15)).name;
+    // A loading chunk tells only its biome.
+    let world = horizon_world::location_predicate::KnownBiome {
+        biome: &biomes.get(chunk.biome(x & 15, y, z & 15)).name,
+        dimension: None,
+    };
     let seed = crate::structure_blocks::loot_seed(tag);
     Some(crate::structure_blocks::roll_container(
         slots,
@@ -872,7 +876,7 @@ fn roll_loaded_loot(
         table,
         seed,
         be.0,
-        biome,
+        crate::structure_blocks::block_centre(be.0, &world),
     ))
 }
 /// `TheEndGatewayBlockEntity.loadAdditional`.
@@ -6259,7 +6263,13 @@ mod tests {
             "minecraft:chests/simple_dungeon".into(),
             Some(42),
             (1, 2, 3),
-            "minecraft:plains",
+            crate::structure_blocks::block_centre(
+                (1, 2, 3),
+                &horizon_world::location_predicate::KnownBiome {
+                    biome: "minecraft:plains",
+                    dimension: None,
+                },
+            ),
         );
         let mut stored = block_entity_data((1, 2, 3), &chest, "minecraft:chest", None);
         let Tag::Compound(fields) = &mut stored else {

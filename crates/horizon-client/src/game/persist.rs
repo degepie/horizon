@@ -1193,7 +1193,7 @@ impl Game<'_> {
         );
         let p = cart.position;
         let pos = (p.x.floor() as i32, p.y.floor() as i32, p.z.floor() as i32);
-        let biome = self.biome_name_at(p).unwrap_or_default();
+        let world = self.loot_world();
         let seed = horizon_client::structure_blocks::loot_seed(tag);
         cart.loot = Some(horizon_client::structure_blocks::roll_container(
             &mut cart.items,
@@ -1201,7 +1201,11 @@ impl Game<'_> {
             table,
             seed,
             pos,
-            &biome,
+            // `ORIGIN`: the cart's position.
+            horizon_world::loot::LootOrigin {
+                pos: [p.x, p.y, p.z],
+                world: &world,
+            },
         ));
     }
     /// An entity Horizon keeps no compound for (orbs, projectiles, the

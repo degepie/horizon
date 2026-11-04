@@ -90,6 +90,7 @@ pub mod living_health;
 pub mod living_hurt;
 pub mod living_landing;
 pub mod living_motion;
+pub mod location_predicate;
 pub mod loot;
 pub mod movement_emission;
 pub mod movement_properties;

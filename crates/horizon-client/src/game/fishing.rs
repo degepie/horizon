@@ -366,7 +366,6 @@ impl Game<'_> {
             // `hookedIn instanceof ItemEntity ? 3 : 5`.
             damage = if hooked_item { 3 } else { 5 };
         } else if hook.nibble > 0 {
-            let biome = self.biome_name_at(hook.position);
             let Some(loot) = horizon_client::structure_blocks::loot_data(
                 &self.options.resources,
                 &self.pack_files(),
@@ -381,11 +380,17 @@ impl Game<'_> {
                 .and_then(|p| p.attribute("minecraft:luck").ok())
                 .unwrap_or(0.0) as f32;
             let mut random = self.world.random.clone();
+            // `ORIGIN`: the hook's position.
+            let world = self.loot_world();
+            let origin = horizon_world::loot::LootOrigin {
+                pos: [hook.position.x, hook.position.y, hook.position.z],
+                world: &world,
+            };
             let items = loot.roll(
                 "minecraft:gameplay/fishing",
                 &mut random,
                 hook.luck as f32 + owner_luck,
-                biome.as_deref(),
+                Some(origin),
                 Some(hook.open_water),
             );
             self.world.random = random;

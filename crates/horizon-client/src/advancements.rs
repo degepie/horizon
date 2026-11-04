@@ -513,39 +513,42 @@ pub struct EntityView {
     /// The data components the entity reports (`Entity.get`): id and value.
     pub components: Vec<(String, String)>,
 }
-fn range_f(v: &Value, x: f64) -> bool {
-    match v {
-        Value::Null => true,
-        Value::Number(n) => n.as_f64().is_some_and(|n| (n - x).abs() < 1e-9),
-        Value::Object(o) => {
-            o.get("min").and_then(Value::as_f64).is_none_or(|m| x >= m)
-                && o.get("max").and_then(Value::as_f64).is_none_or(|m| x <= m)
-        }
-        _ => false,
+/// The game's [`World`] as the shared predicates see it: every answer known.
+pub struct Shared<'a>(pub &'a dyn World);
+impl horizon_world::location_predicate::PredicateWorld for Shared<'_> {
+    fn dimension(&self) -> Option<&str> {
+        Some(self.0.dimension())
+    }
+    fn biome(&self, pos: [i32; 3]) -> Option<String> {
+        Some(self.0.biome(pos))
+    }
+    fn structures(&self, pos: [i32; 3]) -> Option<Vec<String>> {
+        Some(self.0.structures(pos))
+    }
+    fn block(&self, pos: [i32; 3]) -> Option<(String, BTreeMap<String, String>)> {
+        Some(self.0.block(pos))
+    }
+    fn fluid(&self, pos: [i32; 3]) -> Option<String> {
+        self.0.fluid(pos)
+    }
+    fn can_see_sky(&self, pos: [i32; 3]) -> Option<bool> {
+        Some(self.0.can_see_sky(pos))
+    }
+    fn light(&self, pos: [i32; 3]) -> Option<i32> {
+        Some(self.0.light(pos))
+    }
+    fn smokey(&self, pos: [i32; 3]) -> Option<bool> {
+        Some(self.0.smokey(pos))
+    }
+    fn in_tag(&self, registry: &str, tag: &str, id: &str) -> bool {
+        self.0.in_tag(registry, tag, id)
     }
 }
-pub fn range_i(v: &Value, x: i64) -> bool {
-    range_f(v, x as f64)
-}
-/// `Identifier.parse`: an id written without a namespace is a `minecraft:` one.
-pub fn full(id: &str) -> std::borrow::Cow<'_, str> {
-    if id.contains(':') {
-        id.into()
-    } else {
-        format!("minecraft:{id}").into()
-    }
-}
+use horizon_world::location_predicate::range_f;
+pub use horizon_world::location_predicate::{full, range_i};
 /// A registry id, `#tag`, or list matched against one id.
 pub fn id_matches(v: &Value, registry: &str, id: &str, w: &dyn World) -> bool {
-    match v {
-        Value::Null => true,
-        Value::String(s) => match s.strip_prefix('#') {
-            Some(tag) => w.in_tag(registry, &full(tag), id),
-            None => full(s) == id,
-        },
-        Value::Array(a) => a.iter().any(|x| id_matches(x, registry, id, w)),
-        _ => false,
-    }
+    horizon_world::location_predicate::id_matches(v, registry, id, &Shared(w))
 }
 /// `PotionsPredicate`: the potion in a `HolderSet`, plus a `CollectionPredicate`
 /// over the potion's effects (`contains`, `count`, `size`).
@@ -650,88 +653,14 @@ pub fn can_unlock(
     let empty = ItemView::default();
     spectator || item(lock, main_hand.unwrap_or(&empty), w)
 }
-/// `BlockPredicate`.
+/// `BlockPredicate` (horizon-world's `location_predicate::block`).
 pub fn block(v: &Value, pos: [i32; 3], w: &dyn World) -> bool {
-    if v.is_null() {
-        return true;
-    }
-    let (name, props) = w.block(pos);
-    if !id_matches(&v["blocks"], "block", &name, w) {
-        return false;
-    }
-    if let Some(state) = v["state"].as_object() {
-        for (k, want) in state {
-            let have = props.get(k).cloned().unwrap_or_default();
-            let ok = match want {
-                Value::String(s) => have == *s,
-                Value::Bool(b) => have == b.to_string(),
-                Value::Number(n) => have == n.to_string(),
-                Value::Object(_) => have.parse::<f64>().is_ok_and(|h| range_f(want, h)),
-                _ => false,
-            };
-            if !ok {
-                return false;
-            }
-        }
-    }
-    true
+    horizon_world::location_predicate::block(v, pos, &Shared(w))
 }
-/// `LocationPredicate`.
+/// `LocationPredicate` (horizon-world's `location_predicate::location`,
+/// which the loot engine's `location_check` shares).
 pub fn location(v: &Value, p: [f64; 3], w: &dyn World) -> bool {
-    if v.is_null() {
-        return true;
-    }
-    let pos = [
-        p[0].floor() as i32,
-        p[1].floor() as i32,
-        p[2].floor() as i32,
-    ];
-    let posv = &v["position"];
-    if !range_f(&posv["x"], p[0]) || !range_f(&posv["y"], p[1]) || !range_f(&posv["z"], p[2]) {
-        return false;
-    }
-    if let Some(d) = v["dimension"].as_str()
-        && full(d) != w.dimension()
-    {
-        return false;
-    }
-    if !v["biomes"].is_null() && !id_matches(&v["biomes"], "worldgen/biome", &w.biome(pos), w) {
-        return false;
-    }
-    if !v["structures"].is_null() {
-        let here = w.structures(pos);
-        if !here
-            .iter()
-            .any(|s| id_matches(&v["structures"], "worldgen/structure", s, w))
-        {
-            return false;
-        }
-    }
-    if let Some(b) = v["can_see_sky"].as_bool()
-        && b != w.can_see_sky(pos)
-    {
-        return false;
-    }
-    if let Some(b) = v["smokey"].as_bool()
-        && b != w.smokey(pos)
-    {
-        return false;
-    }
-    if !v["light"].is_null() && !range_i(&v["light"]["light"], i64::from(w.light(pos))) {
-        return false;
-    }
-    if !v["block"].is_null() && !block(&v["block"], pos, w) {
-        return false;
-    }
-    if !v["fluid"].is_null() {
-        let Some(f) = w.fluid(pos) else {
-            return false;
-        };
-        if !id_matches(&v["fluid"]["fluids"], "fluid", &f, w) {
-            return false;
-        }
-    }
-    true
+    horizon_world::location_predicate::location(v, p, &Shared(w))
 }
 /// `DataComponentExactPredicate.test` on an entity: every expected
 /// component equals what the entity reports (absent ones never match).

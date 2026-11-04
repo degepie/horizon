@@ -2782,15 +2782,14 @@ impl Game<'_> {
         let rolled = match (table, entity) {
             (Some(table), BlockEntity::Chest(slots)) if slots.iter().all(Option::is_none) => {
                 let loot = structure_blocks::loot_data(&self.options.resources, &self.pack_files());
-                let at = Vec3::new(f64::from(key.0), f64::from(key.1), f64::from(key.2));
-                let biome = self.biome_name_at(at).unwrap_or_default();
+                let world = self.loot_world();
                 Some(structure_blocks::roll_container(
                     slots,
                     loot.as_deref(),
                     table,
                     structure_blocks::loot_seed(tag),
                     key,
-                    &biome,
+                    structure_blocks::block_centre(key, &world),
                 ))
             }
             _ => None,

@@ -234,6 +234,46 @@ impl adv::World for View<'_, '_> {
         }
     }
 }
+/// The level as a loot roll's `location_check` sees it: the predicates'
+/// view, with the biome read from the world's own biome list, as the
+/// loot rolls read it before.
+pub(super) struct LootView<'a, 'g>(&'a Game<'g>);
+impl horizon_world::location_predicate::PredicateWorld for LootView<'_, '_> {
+    fn dimension(&self) -> Option<&str> {
+        Some(self.0.dim.id())
+    }
+    fn biome(&self, p: [i32; 3]) -> Option<String> {
+        let at = Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]));
+        self.0.biome_name_at(at)
+    }
+    fn structures(&self, p: [i32; 3]) -> Option<Vec<String>> {
+        Some(adv::World::structures(&View(self.0), p))
+    }
+    fn block(&self, p: [i32; 3]) -> Option<(String, BTreeMap<String, String>)> {
+        Some(adv::World::block(&View(self.0), p))
+    }
+    fn fluid(&self, p: [i32; 3]) -> Option<String> {
+        adv::World::fluid(&View(self.0), p)
+    }
+    fn can_see_sky(&self, p: [i32; 3]) -> Option<bool> {
+        Some(adv::World::can_see_sky(&View(self.0), p))
+    }
+    fn light(&self, p: [i32; 3]) -> Option<i32> {
+        Some(adv::World::light(&View(self.0), p))
+    }
+    fn smokey(&self, p: [i32; 3]) -> Option<bool> {
+        Some(adv::World::smokey(&View(self.0), p))
+    }
+    fn in_tag(&self, registry: &str, tag: &str, id: &str) -> bool {
+        adv::World::in_tag(&View(self.0), registry, tag, id)
+    }
+}
+impl<'g> Game<'g> {
+    /// The level for a loot roll's location checks ([`LootView`]).
+    pub(super) fn loot_world(&self) -> LootView<'_, 'g> {
+        LootView(self)
+    }
+}
 fn now_text() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

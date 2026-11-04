@@ -195,17 +195,34 @@ pub fn forget_loot_data() {
     *LOOT.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
+/// A container's `ORIGIN`: the centre of its block (expected from
+/// `RandomizableContainer.unpackLootTable`, `Vec3.atCenterOf`).
+pub fn block_centre(
+    pos: (i32, i32, i32),
+    world: &dyn horizon_world::location_predicate::PredicateWorld,
+) -> horizon_world::loot::LootOrigin<'_> {
+    horizon_world::loot::LootOrigin {
+        pos: [
+            f64::from(pos.0) + 0.5,
+            f64::from(pos.1) + 0.5,
+            f64::from(pos.2) + 0.5,
+        ],
+        world,
+    }
+}
+
 /// `RandomizableContainer.unpackLootTable` of a container at `pos`: `table`
 /// rolled into `slots`. A missing or zero seed is the level's random in
-/// vanilla; Horizon derives one from the position. Without loot data the
-/// container stays empty and still saves its table.
+/// vanilla; Horizon derives one from the position. `origin` is where the
+/// roll's location checks look (`ORIGIN`). Without loot data the container
+/// stays empty and still saves its table.
 pub fn roll_container(
     slots: &mut [Option<ItemStack>],
     loot: Option<&LootData>,
     table: String,
     saved_seed: Option<i64>,
     pos: (i32, i32, i32),
-    biome: &str,
+    origin: horizon_world::loot::LootOrigin<'_>,
 ) -> crate::save::RolledLoot {
     let seed = saved_seed.filter(|s| *s != 0).unwrap_or_else(|| {
         horizon_core::random::position_seed(horizon_core::position::BlockPos::new(
@@ -214,7 +231,7 @@ pub fn roll_container(
     });
     if let Some(loot) = loot {
         // LootTable.fill spreads the items over the container's own size.
-        let rolled = loot.fill(&table, seed, slots.len(), Some(biome));
+        let rolled = loot.fill(&table, seed, slots.len(), Some(origin));
         for (slot, stack) in slots.iter_mut().zip(rolled) {
             // With what the rolls put on them: enchantments
             // (enchant_with_levels in End city chests), potions and an
@@ -299,13 +316,18 @@ pub fn block_entities(
         };
         if let (BlockEntity::Chest(slots), Some(table)) = (&mut entity, text(nbt, "LootTable")) {
             let seed = loot_seed(&Tag::Compound(nbt.clone()));
+            // A generating chunk tells only its biome.
+            let world = horizon_world::location_predicate::KnownBiome {
+                biome: chunk.biome_at(x, y, z),
+                dimension: None,
+            };
             rolled.push(roll_container(
                 slots,
                 loot,
                 table,
                 seed,
                 (x, y, z),
-                chunk.biome_at(x, y, z),
+                block_centre((x, y, z), &world),
             ));
         }
         out.push(((x, y, z), entity));
@@ -436,7 +458,13 @@ mod tests {
             "minecraft:chests/simple_dungeon".into(),
             Some(7),
             (1, 2, 3),
-            "minecraft:plains",
+            block_centre(
+                (1, 2, 3),
+                &horizon_world::location_predicate::KnownBiome {
+                    biome: "minecraft:plains",
+                    dimension: None,
+                },
+            ),
         );
         let mut saved = horizon_world::nbt::Compound::new();
         saved.insert("Items".into(), crate::save::encode_items(&slots));
