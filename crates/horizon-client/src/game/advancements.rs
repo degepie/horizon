@@ -446,13 +446,42 @@ impl Game<'_> {
     }
     /// The player as a command's predicates see it: with what it looks at.
     pub(super) fn player_entity(&self) -> EntityView {
-        self.player_entity_looking(true)
+        let mut me = self.player_entity_looking(true);
+        me.player_facts = self.player_facts(adv::FactsAsked::ALL);
+        me
     }
     /// [`Self::player_entity`] for `trigger`'s criteria: what the player
-    /// looks at only when one of them may ask (a ray against every entity
-    /// otherwise).
+    /// looks at, and its level, statistics, advancements and recipes, only
+    /// when one of them may ask (a ray against every entity and copies of
+    /// the player's records otherwise).
     pub(super) fn player_entity_for(&self, trigger: &str) -> EntityView {
-        self.player_entity_looking(self.adv.tree.may_look(trigger))
+        self.player_entity_for_any(&[trigger])
+    }
+    /// [`Self::player_entity_for`] for the criteria of several triggers.
+    pub(super) fn player_entity_for_any(&self, triggers: &[&str]) -> EntityView {
+        let tree = &self.adv.tree;
+        let mut me = self.player_entity_looking(triggers.iter().any(|t| tree.may_look(t)));
+        let asked = (triggers.iter()).fold(adv::FactsAsked::default(), |all, t| {
+            all.or(tree.player_facts_asked(t))
+        });
+        me.player_facts = self.player_facts(asked);
+        me
+    }
+    /// The player's level, statistics, advancements and recipes that
+    /// `asked` names, for `PlayerPredicate`; records not loaded stay `None`.
+    fn player_facts(&self, asked: adv::FactsAsked) -> adv::PlayerFacts {
+        if self.player.is_none() {
+            return adv::PlayerFacts::default();
+        }
+        adv::PlayerFacts {
+            level: asked.level.then_some(self.experience.level),
+            stats: (asked.stats && self.stats.loaded).then(|| self.stats.values.clone()),
+            advancements: (asked.advancements && self.adv.loaded)
+                .then(|| (self.adv.tree.clone(), self.adv.progress.clone())),
+            recipes: asked
+                .recipes
+                .then(|| self.level.recipe_book.recipes.clone()),
+        }
     }
     /// The player as predicates see it, with what it looks at when `looking`.
     pub(super) fn player_entity_looking(&self, looking: bool) -> EntityView {
@@ -897,6 +926,10 @@ impl Game<'_> {
         let tree = self.adv.tree.clone();
         let index = self.inventory_index();
         let list = index.candidates(stacks.iter().map(|s| s.id.as_str()));
+        if list.is_empty() {
+            return;
+        }
+        let me = self.player_entity_for("minecraft:inventory_changed");
         self.trigger_criteria(&tree, &list, move |c, w| {
             let slots = &c["slots"];
             let range = |k: &str, v: f64| {
@@ -917,7 +950,19 @@ impl Game<'_> {
             for s in &stacks {
                 wanted.retain(|p| !adv::item(p, s, w));
             }
+            // `InventoryChangeTrigger.TriggerInstance`'s `player`
+            // (`ContextAwarePredicate`), tested by `SimpleCriterionTrigger.trigger`.
             wanted.is_empty()
+                && adv::conditions(
+                    &c["player"],
+                    &adv::Entities {
+                        this: Some(&me),
+                        origin: me.position,
+                        tool: None,
+                        block_pos: None,
+                    },
+                    w,
+                )
         });
     }
     /// `PlayerTrigger.LOCATION` every second, and the other per-tick checks.
@@ -1414,11 +1459,10 @@ impl Game<'_> {
     ) {
         let target = if thrower == self.acting_uuid() {
             // The player is the entity of both triggers.
-            let tree = &self.adv.tree;
-            let me = self.player_entity_looking(
-                tree.may_look("minecraft:thrown_item_picked_up_by_entity")
-                    || tree.may_look("minecraft:thrown_item_picked_up_by_player"),
-            );
+            let me = self.player_entity_for_any(&[
+                "minecraft:thrown_item_picked_up_by_entity",
+                "minecraft:thrown_item_picked_up_by_player",
+            ]);
             self.trigger_item_entity("minecraft:thrown_item_picked_up_by_entity", stack, &me);
             me
         } else if let Some(id) = self.mob_by_uuid(thrower) {
