@@ -61,19 +61,19 @@ none
 
 ## Self-check
 
-**pr_ready** (`tools/pr_ready.py --quick --base upstream/main` on vm, against upstream/main at 63eccfc35, 1 min 46 s)
+**pr_ready** (`tools/pr_ready.py --quick --base upstream/main` on vm, against upstream/main at 63eccfc35, 2 min 36 s)
 
 | Check | Result |
 | --- | --- |
-| Scope | ⚠️ 5 files, +625 −18; 531 lines of code: over 500, split it if it can ship in parts |
+| Scope | ⚠️ 10 files, +945 −22; 702 lines of code: over 500, split it if it can ship in parts |
 | Cargo.lock | ✅ unchanged |
 | Public tree | ✅ |
-| Python tests | ✅ 644 passed (1 min 23 s) |
+| Python tests | ✅ 644 passed (1 min 18 s) |
 | rustfmt | ✅ (16 s) |
 | Rust | ⚠️ 1.97.0 is older than CI's stable (1.99): clippy may flag lints CI doesn't, update with `rustup update` |
-| clippy | ❌ failed; likely the old Rust above (29 s) |
-| tests: horizon-client, horizon-client-lib | ✅ 2682 passed (55 s) |
-| doc tests | ✅ 0 passed (5 s) |
+| clippy | ❌ failed; likely the old Rust above (40 s) |
+| tests: horizon-client, horizon-client-lib | ✅ 2683 passed (1 min 34 s) |
+| doc tests | ✅ 0 passed (6 s) |
 | content root tests | ➖ content root untouched |
 | tokens.css up to date | ➖ theme untouched |
 | launcher rustfmt | ➖ launcher untouched |
@@ -85,7 +85,7 @@ none
 clippy fails here only on a lint that is already on main: `manual_range_contains`, in
 `horizon-world/src/worldgen/aquifer/noise_based.rs:476`. This runner's Rust 1.97 flags it. The changed files have
 no clippy warnings (`cargo clippy -p horizon-client -p horizon-client-lib --all-targets` without `-D warnings`).
-New tests: `cargo test -p horizon-client-lib --lib advancements::` (29 passed). Gameplay advancement tests:
-`cargo test -p horizon-client --lib advancement` (10 passed).
+New tests: `cargo test -p horizon-client-lib --lib advancements::` (30 passed, 1 ignored).
+Scope counts `cloud-notes/`, which is removed before upstream.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -51,6 +51,9 @@ Nothing was claimed.
     and a gamemode-only player predicate → none.
 - `cargo test -p horizon-client-lib --lib advancements::`: 29 ok. `cargo test -p horizon-client --lib
   advancement`: 10 ok. pr_ready `--quick`: tests 2682 ok, rustfmt ok.
+- After the review fix, pr_ready `--quick`: 7 code files, tests 2683 ok, rustfmt ok, clippy fails only on the
+  `noise_based.rs:476` lint described below. Only `load_with` (and tests) calls the tree indexes, so no other
+  path builds a `Tree` without `index_player_facts`.
 - clippy: no warnings in the changed files. pr_ready's clippy fails only on a `manual_range_contains` lint that
   is already on main (`noise_based.rs:476`, also `dragon.rs`, `camera.rs`). This runner has Rust 1.97; CI has 1.99.
 
@@ -128,4 +131,9 @@ Single player's own player is a hub guest on the server thread (`integrated.rs`:
 
 ## advisor
 
-Used once, before the approach. It suggested this copy design; the user's task asked for the same. Used again before finishing (below).
+Used once, before the approach. It suggested this copy design; the user's task asked for the same. Used again before finishing. It asked for three things, all done:
+- rerun pr_ready after the review fix and paste the new block into PR.md;
+- check that no other path re-indexes a `Tree`;
+- finish this section.
+
+It was not rate-limited.
