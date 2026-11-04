@@ -603,7 +603,10 @@ impl std::fmt::Debug for PlayerFacts {
         f.debug_struct("PlayerFacts")
             .field("level", &self.level)
             .field("stats", &self.stats)
-            .field("advancements", &self.advancements.as_ref().map(|(_, p)| p.criteria.len()))
+            .field(
+                "advancements",
+                &self.advancements.as_ref().map(|(_, p)| p.criteria.len()),
+            )
             .field("recipes", &self.recipes.as_ref().map(BTreeSet::len))
             .finish()
     }
@@ -2284,7 +2287,10 @@ mod tests {
             );
         }
         // Not filled: a level asked fails, none asked passes.
-        assert!(!player_matches(json!({"level": {"min": 0}}), &PlayerFacts::default()));
+        assert!(!player_matches(
+            json!({"level": {"min": 0}}),
+            &PlayerFacts::default()
+        ));
         assert!(player_matches(json!({}), &PlayerFacts::default()));
     }
     #[test]
@@ -2292,35 +2298,84 @@ mod tests {
         let mut counts: BTreeMap<String, BTreeMap<String, i32>> = BTreeMap::new();
         (counts.entry("minecraft:custom".into()).or_default())
             .insert("minecraft:walk_one_cm".into(), 1000);
-        (counts.entry("minecraft:mined".into()).or_default())
-            .insert("minecraft:stone".into(), 3);
+        (counts.entry("minecraft:mined".into()).or_default()).insert("minecraft:stone".into(), 3);
         let facts = PlayerFacts {
             stats: Some(counts),
             ..PlayerFacts::default()
         };
-        let stat = |ty: &str, id: &str, value: Value| json!({"type": ty, "stat": id, "value": value});
+        let stat =
+            |ty: &str, id: &str, value: Value| json!({"type": ty, "stat": id, "value": value});
         for (stats, expected) in [
-            (vec![stat("minecraft:custom", "minecraft:walk_one_cm", json!({"min": 1000}))], true),
-            (vec![stat("minecraft:custom", "minecraft:walk_one_cm", json!({"min": 1001}))], false),
-            (vec![stat("minecraft:custom", "minecraft:walk_one_cm", json!({"max": 999}))], false),
+            (
+                vec![stat(
+                    "minecraft:custom",
+                    "minecraft:walk_one_cm",
+                    json!({"min": 1000}),
+                )],
+                true,
+            ),
+            (
+                vec![stat(
+                    "minecraft:custom",
+                    "minecraft:walk_one_cm",
+                    json!({"min": 1001}),
+                )],
+                false,
+            ),
+            (
+                vec![stat(
+                    "minecraft:custom",
+                    "minecraft:walk_one_cm",
+                    json!({"max": 999}),
+                )],
+                false,
+            ),
             // Bare ids are `minecraft:` ones.
-            (vec![stat("custom", "walk_one_cm", json!({"min": 1000}))], true),
+            (
+                vec![stat("custom", "walk_one_cm", json!({"min": 1000}))],
+                true,
+            ),
             // The same id under another type is another counter: never counted, 0.
-            (vec![stat("minecraft:mined", "minecraft:walk_one_cm", json!({"min": 1}))], false),
-            (vec![stat("minecraft:mined", "minecraft:walk_one_cm", json!({"max": 0}))], true),
-            (vec![stat("minecraft:killed", "minecraft:zombie", json!(0))], true),
+            (
+                vec![stat(
+                    "minecraft:mined",
+                    "minecraft:walk_one_cm",
+                    json!({"min": 1}),
+                )],
+                false,
+            ),
+            (
+                vec![stat(
+                    "minecraft:mined",
+                    "minecraft:walk_one_cm",
+                    json!({"max": 0}),
+                )],
+                true,
+            ),
+            (
+                vec![stat("minecraft:killed", "minecraft:zombie", json!(0))],
+                true,
+            ),
             // Every entry must match.
             (
                 vec![
                     stat("minecraft:mined", "minecraft:stone", json!({"min": 3})),
-                    stat("minecraft:custom", "minecraft:walk_one_cm", json!({"min": 5000})),
+                    stat(
+                        "minecraft:custom",
+                        "minecraft:walk_one_cm",
+                        json!({"min": 5000}),
+                    ),
                 ],
                 false,
             ),
             (
                 vec![
                     stat("minecraft:mined", "minecraft:stone", json!({"min": 3})),
-                    stat("minecraft:custom", "minecraft:walk_one_cm", json!({"min": 500})),
+                    stat(
+                        "minecraft:custom",
+                        "minecraft:walk_one_cm",
+                        json!({"min": 500}),
+                    ),
                 ],
                 true,
             ),
@@ -2343,7 +2398,10 @@ mod tests {
             (json!({"minecraft:iron_pickaxe": false}), false),
             (json!({"minecraft:diamond_pickaxe": false}), true),
             (json!({"minecraft:diamond_pickaxe": true}), false),
-            (json!({"minecraft:iron_pickaxe": true, "minecraft:diamond_pickaxe": true}), false),
+            (
+                json!({"minecraft:iron_pickaxe": true, "minecraft:diamond_pickaxe": true}),
+                false,
+            ),
         ] {
             assert_eq!(
                 player_matches(json!({"recipes": recipes}), &facts),
@@ -2391,8 +2449,14 @@ mod tests {
             advancements: Some((tree, progress)),
             ..PlayerFacts::default()
         };
-        assert!(player_matches(json!({"advancements": {"pack:a": true}}), &done));
-        assert!(!player_matches(json!({"advancements": {"pack:a": false}}), &done));
+        assert!(player_matches(
+            json!({"advancements": {"pack:a": true}}),
+            &done
+        ));
+        assert!(!player_matches(
+            json!({"advancements": {"pack:a": false}}),
+            &done
+        ));
         let asked = json!({"advancements": {"pack:a": false}});
         assert!(!player_matches(asked, &PlayerFacts::default()));
     }
@@ -2445,7 +2509,10 @@ mod tests {
                 ..none
             }
         );
-        assert_eq!(tree.player_facts_asked("minecraft:inventory_changed"), FactsAsked::ALL);
+        assert_eq!(
+            tree.player_facts_asked("minecraft:inventory_changed"),
+            FactsAsked::ALL
+        );
         assert_eq!(tree.player_facts_asked("minecraft:recipe_unlocked"), none);
         assert_eq!(tree.player_facts_asked("minecraft:using_item"), none);
     }
