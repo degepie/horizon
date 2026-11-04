@@ -5,7 +5,7 @@
 - **Base:** fresh `upstream/main` @ `63eccfc355` (2026-11-04 21:57 +0100). Line numbers below are at that commit.
 - **Pack audited:** Modrinth "BlazeandCave's Advancements Pack 1.21.1" (version_number `1.21.1`, published
   2026-09-16, game version 26.3, `pack.mcmeta` min/max_format `[121,0]`), zip sha256 `ce391fe4…71d7`. It holds 1333
-  advancement files (1332 parsed, one is not an advancement), 58 predicates, 5436 `.mcfunction` and 85 tag files. Language pack: Modrinth
+  advancement files (1332 with a `criteria` key; one file has none), 58 predicates, 5436 `.mcfunction` and 85 tag files. Language pack: Modrinth
   "BACAP Language Pack" `1.21` (game 26.2, sha256 `63b82a42…a864`, 31 lang files). Neither is committed. Both
   are kept outside the repo.
 - **GitHub copy:** not analysed. github.com was unreachable from this session. Modrinth was blocked at first, then
@@ -16,7 +16,9 @@
 - **Open-PR state:** the GitHub API for horizon-rust/horizon was not reachable. "Open" below means a `refs/pull/N/merge`
   ref exists and the head is not in `upstream/main`.
 - No jar was available. Vanilla behaviour is stated as "expected from `Class.method`".
-- advisor: used once, before writing.
+- advisor: used before writing and before finishing.
+- **Branch:** `cloud/bacap-native-audit`, from `upstream/main`, with this one file. The harness-named
+  `claude/bacap-native-audit-27cuqw` was not touched.
 
 ## How Horizon fails, which decides the symptom
 
@@ -47,10 +49,10 @@ In `crates/horizon-client/src/advancements.rs`, an unhandled field can fail in o
 | 7 | Entity sub-predicate keys without a namespace | **FIXED** | `advancements.rs:771` `match &*full(key)` (commit `02205a31e0`, branch `fix/bare-ids` = merged #8662). `conditions` types use `full()` too (:1003). | Bare keys BACAP uses: `entity_type` 2032 entries, `location` 557, `nbt` 473, `equipment` 235, `distance` 106, `vehicle` 86, `flags` 72, `effects` 42, `components` 37, `passenger` 21, `stepping_on` 13, `movement` 4, `entity_tags` 3. All resolve. (BACAP writes `entity_type`, never `type`.) | none |
 | 8 | Entity `nbt` on projectiles (arrow `weapon`) | **MISSING** (blocked). Mobs/player: **PR-OPEN #9494** | Today `nbt` falls to `_ => false` (:844), so every criterion with an entity `nbt` is never granted. #9494 gives `nbt` to mobs (`mob_entity`) and the player only. Projectile views (killing_blow `direct_entity`) get none. | `{weapon:{id:"minecraft:bow"}}`: 3 (`shoot_arrow`, `the_mighty_hunter`, `multiclassed`). Mob/player `nbt`: 41 (`VillagerData` 261 entries, `Variant` 66, `carriedBlockState` 45, `MainGene` 20…). | After #9494: build the arrow's or trident's saved tag (`weapon`, `item`…) in its `DamageView.direct` view, expected from `NbtPredicate.getEntityTagToCompare` on `AbstractArrow.addAdditionalSaveData`. |
 | 9 | `movement` sub-predicate | **MISSING** (blocked) | No `movement` arm: `_ => false` (:844). `EntityView` has no velocity or fall distance. | 2 (`hit_and_run`: minecart speed ≥ 8; `arrow_of_ultimate_obliteration`: speed ≥ 70 while `is_fall_flying`) | Add velocity (per second) and `fall_distance` to `EntityView`. Match `x/y/z/speed/horizontal_speed/vertical_speed/fall_distance` as expected from `MovementPredicate.matches`. |
-| 10 | Data-pack tags in predicates | **PR-OPEN #9403** (entity_type, biome, damage_type). **MISSING** for structure tags. Mob behaviour: MISSING, but BACAP doesn't need it | `game/advancements.rs:218-235`: `entity_type` and `worldgen/biome` read `mob_data()`, loaded with `PackOverlay::NONE` (`mobs/data.rs:85-93`). `damage_type` reads `enchant.rs:183`, the vanilla folder only. `worldgen/structure` falls to `_ => false` for every tag, vanilla ones too. Item and block tags already carry the world's overlay (`items.rs:927-928`). #9403 adds a `pack_tags` map for only the 3 registries. | data-pack `#blazeandcave:` entity tags: 41 advancements; damage tags (`is_player_hit`, `spear`): 27; biome tags: 2; structure tags (`#blazeandcave:village`, `#minecraft:shipwreck`, `ruined_portal`…): 9 (`titanic`, `ahoy`, `oh_look_it_dings`, `raidin_master`…). BACAP adds no `minecraft:` behaviour tags (only function tags), so mob behaviour is not affected. | Merge #9403. Then add `worldgen/structure` (load_tags with the overlay, matching `World::structures` ids). Mob behaviour (`entity_has` in `goals.rs`, `boat_passengers.rs`…) would also need the overlay. The fork branch `cloud/pack-tags-mob-behaviour` exists, but I found no upstream PR. |
+| 10 | Data-pack tags in predicates | **PR-OPEN #9403** (item, block, entity_type, biome, damage_type). **MISSING** for structure tags. Mob behaviour: MISSING, but BACAP doesn't need it | `game/advancements.rs:218-235`: `entity_type` and `worldgen/biome` read `mob_data()`, loaded with `PackOverlay::NONE` (`mobs/data.rs:85-93`). `damage_type` reads `enchant.rs:183`, the vanilla folder only. `worldgen/structure` falls to `_ => false` for every tag, vanilla ones too. Item and block tags read `self.0.res.items()` (:219), the game's own tables. The world's packs' `Items` (`world_tables`, through `Game::items`, `game.rs:19858-19863`) are not used, so `#blazeandcave:` item and block tags are blocked too. #9403 switches that lookup to `self.0.items()` and adds a `pack_tags` map for the 3 other registries. | data-pack `#blazeandcave:` item/block tags (`axes`, `spears`, `master_*`…): 45 advancements; entity tags: 41; damage tags (`is_player_hit`, `spear`): 27; biome tags: 2; structure tags (`#blazeandcave:village`, `#minecraft:shipwreck`, `ruined_portal`…): 9 (`titanic`, `ahoy`, `oh_look_it_dings`, `raidin_master`…). Union of all the tag gaps: 109 advancements. BACAP adds no `minecraft:` behaviour tags (only function tags), so mob behaviour is not affected. | Merge #9403. Then add `worldgen/structure` (load_tags with the overlay, matching `World::structures` ids). Mob behaviour (`entity_has` in `goals.rs`, `boat_passengers.rs`…) would also need the overlay. The fork branch `cloud/pack-tags-mob-behaviour` exists, but I found no upstream PR. |
 | 11 | BlockPredicate `nbt` / `components` | `nbt`: **PR-OPEN #9405**. `components`: **MISSING** | `advancements.rs:654-678` reads `blocks` and `state` only, so `nbt` and `components` are ignored (false grant). #9405 adds `nbt` only. | `nbt` 2 (`riddle_fourth_line`, `light_show`). `components`: 0 in BACAP. | Merge #9405. `components`/`predicates` on the block entity's components, expected from `BlockPredicate.matchesComponents` (fork branch `cloud/block-predicate-components`; no upstream PR seen). |
 | 12 | BACAP language resource pack | **MISSING** | `horizon-client-core/src/lang.rs:416` parses each `lang/*.json` with strict `serde_json` and silently drops a file that fails. **All 31** BACAP lang files fail strict JSON: they use `#` line comments (275 in `fr_fr.json`). After stripping `#` lines, 6 still fail (raw control characters in strings, `de_de`, `tr_tr`, `rpr`; other syntax, `ko_kr`, `uk_ua`, `zh_tw`). The trailing-comma case does not occur in 1.21. Pack lang overlays are supported (`Language::load` layers every source, :395-420). English works without the pack: BACAP's titles use the English text as the `translate` key and `lang::get` falls back to the key (:553-559). | Every non-English player (≈3000-3460 keys per language) | A lenient reader equal to Gson's lenient `JsonReader` (`#` and `//` comments, `/* */`, unquoted or single-quoted names, raw control characters), expected from `Language.loadFromJson` (Gson). Stripping `#` alone fixes 25/31 files, not all of them. |
-| 13 | Chat spam from function-run commands | **PARTLY** | Function lines run with `silent: true` (`game/functions.rs:464-468`), installed as `command_source` by `with_source` (`commands/execute.rs:215-228`). `feedback`, `feedback_unbroadcast` and `command_failure` honour it (`commands.rs:279-332`), so `scoreboard`, `execute store` and `advancement` feedback no longer prints. **Query commands still bypass it:** `time query …` (`commands.rs:2022, 2138, 2156, 2163`), `gamerule <rule>` query (:3271), `difficulty` query (:3297), `seed` (:1099) call `system_message` directly. | `blazeandcave:ten_second_timer.mcfunction:19` runs `execute store result score … run time query minecraft:day`, which reaches `time.query.timeline` → chat line every timer run. | Route these through `feedback` (`sendSuccess(…, false)`), expected from `TimeCommand.queryTime` / `GameRuleCommand.queryRule` using `CommandSourceStack.sendSuccess`. |
+| 13 | Chat spam from function-run commands | **PARTLY** | Function lines run with `silent: true` (`game/functions.rs:464-468`), installed as `command_source` by `with_source` (`commands/execute.rs:215-228`). `feedback`, `feedback_unbroadcast` and `command_failure` honour it (`commands.rs:279-332`), so `scoreboard`, `execute store` and `advancement` feedback no longer prints. **Query commands still bypass it:** `time query …` (`commands.rs:2022, 2138, 2156, 2163`), `gamerule <rule>` query (:3271), `difficulty` query (:3297), `seed` (:1099) call `system_message` directly. | `blazeandcave:ten_second_timer.mcfunction:19` runs `execute store result score … run time query minecraft:day`, which reaches `time.query.timeline`. That prints a chat line on every timer run, provided `minecraft:day` is in `ui.timelines` (`game/chat.rs:232-246` reads them from the prepared root's `data/minecraft/timeline`, where I expect vanilla's `day` to be). If it is not there, the command fails silently instead, and `bac_current_time` is never set. | Route these through `feedback` (`sendSuccess(…, false)`), expected from `TimeCommand.queryTime` / `GameRuleCommand.queryRule` using `CommandSourceStack.sendSuccess`. |
 
 ## Other gaps found in BACAP
 
@@ -69,7 +71,11 @@ Counts are advancements, with entries in brackets. They were checked against the
 
 What is handled: all 54 triggers BACAP uses except `entity_killed_player` (`impossible` is meant to be fired by functions). Every condition type except `entity_scores`. `\` line continuations in functions (`horizon-client-render/src/datapack.rs:541-566`). `schedule`, function tags `minecraft:tick`/`load`, reward `function`.
 
-Not checked: `execute if predicate` with BACAP's 58 predicate files (16 uses), the 7 `dialog` files, `datapack` and `team` commands.
+Not checked:
+- `execute if predicate` with BACAP's 58 predicate files (16 uses);
+- the 7 `dialog` files;
+- the `datapack` and `team` commands;
+- the per-trigger condition fields (90 distinct `trigger.field` pairs in BACAP, e.g. `villager_trade.item`, `enchanted_item.levels`, `brewed_potion.potion`) against each trigger's handler. I only checked `damage`, `killing_blow`, `items`, `slots`, `recipes` and the entity, item and location predicates.
 
 **In all:** 328 of the 1332 advancements have a criterion that uses at least one gap above. That figure leaves out:
 - the global items: lang pack, the `time query` spam;
@@ -79,19 +85,21 @@ Not checked: `execute if predicate` with BACAP's 58 predicate files (16 uses), t
 
 The pack loads and runs, and its function machinery is close to vanilla: silencing, continuations, schedule and tick
 all work. Per-advancement correctness is not there yet. The biggest problem is **false grants**:
-- every milestone and statistics advancement (≈110: items 1, 2a, 3) is awarded as soon as its trigger fires;
-- ≈100 more are **unreachable**: `entity_killed_player`, entity `nbt`, data-pack tags, structure tags,
-  `entity_scores`, `movement`.
+- 111 advancements (item 1: milestones and statistics) are awarded as soon as their trigger fires;
+- 58 more get false grants through items 2a and 3;
+- 137 have a criterion that is **unreachable**: `entity_killed_player`, entity `nbt`, data-pack and structure tags,
+  `entity_scores`, `entity_tags`, `raider`, `movement`. Some of these advancements are still reachable through
+  their other criteria (the roots, for example).
 
 So BACAP is not playable natively yet. It is about 5 PRs away from "mostly right".
 
-PRs that would close the most advancements:
+PRs that would close the most advancements (ranked by advancements affected):
 
-1. **PlayerPredicate `stats` / `advancements` / `level` (+ `recipes`)**: stops ≈110 false grants (items 1 and 2a, ~25 lines in `inventory_changed`). This one has the highest impact.
+1. **PlayerPredicate `stats` / `advancements` / `level` (+ `recipes`)**: stops 111 false grants (item 1), plus 11 more from item 2a (a few lines in `inventory_changed`). This one has the highest impact.
 2. **Merge #9494 + projectile `nbt`**: unblocks 44 (41 mob/player + 3 arrow `weapon`).
-3. **Merge #9403 + structure tags**: unblocks 41 + 27 + 2 + 9 ≈ 75 (overlapping).
+3. **Merge #9403 + structure tags**: unblocks up to 109 (item/block 45, entity 41, damage 27, biome 2, structure 9; overlapping).
 4. **Fire `entity_killed_player`**: unblocks 17 (68 criteria). A small PR.
-5. **Item predicates over the real stack** (`stored_enchantments`, `potion_contents`, exact `components`, …) **+ re-run `inventory_changed` on component changes**: stops ≈40 false grants and fixes ≈53 late grants. Merge #9496 first, since it touches the same function.
+5. **Item predicates over the real stack** (`stored_enchantments`, `potion_contents`, exact `components`, …) **+ re-run `inventory_changed` on component changes**: stops about 50 false grants and fixes 53 late grants. Merge #9496 first, since it touches the same function.
 
 Small follow-ups:
 - `finish_drinking` stat and trigger (9);
