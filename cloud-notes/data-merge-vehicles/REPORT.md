@@ -34,8 +34,10 @@ block), Crystal, Dragon, Cloud (area effect cloud), Spawner (ominous item spawne
 markers.
 
 ## Verified
-- Unit test `data_merge_loads_into_a_live_cart` (`minecarts.rs`) and the existing minecart tests: see PR.md.
-- clippy and the touched crates' tests: see the pr_ready block in PR.md.
+- `cargo test -p horizon-client --lib minecarts::`: 19 passed, including the new `data_merge_loads_into_a_live_cart`.
+- `pr_ready.py --quick --base upstream/main` (Rust 1.99): fmt, clippy, 897 horizon-client tests and 644
+  Python tests pass. Block in PR.md.
+- The Boat and Guest arms have no unit test: they need a whole `Game`, and there is no test fixture for one.
 
 ## Not verified (needs your machines)
 - In game: the ISSUE.md repro, on both single-player paths and on LAN.
