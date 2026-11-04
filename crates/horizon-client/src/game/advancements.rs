@@ -178,6 +178,12 @@ impl adv::World for View<'_, '_> {
             .unwrap_or_default();
         (name, props)
     }
+    fn block_entity_components(&self, p: [i32; 3]) -> Option<horizon_world::nbt::Compound> {
+        let saved = self.0.saved_block_entity((p[0], p[1], p[2]))?;
+        Some(horizon_client::block_entity_item::collected_components(
+            &saved,
+        ))
+    }
     fn fluid(&self, p: [i32; 3]) -> Option<String> {
         match self
             .0

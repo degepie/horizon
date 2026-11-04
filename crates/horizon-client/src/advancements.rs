@@ -463,6 +463,11 @@ pub trait World {
     fn structures(&self, pos: [i32; 3]) -> Vec<String>;
     /// Block name and properties.
     fn block(&self, pos: [i32; 3]) -> (String, BTreeMap<String, String>);
+    /// The data components of the block entity at `pos`
+    /// (`BlockEntity.collectComponents`), `None` without one.
+    fn block_entity_components(&self, _pos: [i32; 3]) -> Option<horizon_world::nbt::Compound> {
+        None
+    }
     fn fluid(&self, pos: [i32; 3]) -> Option<String>;
     fn can_see_sky(&self, pos: [i32; 3]) -> bool;
     fn light(&self, pos: [i32; 3]) -> i32;
@@ -674,7 +679,193 @@ pub fn block(v: &Value, pos: [i32; 3], w: &dyn World) -> bool {
             }
         }
     }
+    // `matchesBlockEntity`: `DataComponentMatchers` on the block entity's
+    // components; a test there fails where there is no block entity.
+    if !(v["components"].is_null() && v["predicates"].is_null()) {
+        let Some(have) = w.block_entity_components(pos) else {
+            return false;
+        };
+        if !component_matchers(&v["components"], &v["predicates"], &have, w) {
+            return false;
+        }
+    }
     true
+}
+/// `DataComponentMatchers.test` on NBT-encoded components: every exact
+/// component is present with an equal value (`DataComponentExactPredicate`),
+/// and every partial predicate holds (`DataComponentPredicate.Single`, which
+/// fails on an absent component). Partial types block entities do not carry
+/// are not ported and never match.
+fn component_matchers(
+    exact: &Value,
+    partial: &Value,
+    have: &horizon_world::nbt::Compound,
+    w: &dyn World,
+) -> bool {
+    use horizon_world::nbt::{JavaString, Tag};
+    let get = |id: &str| have.get(&JavaString::from(&*full(id)));
+    let exact_ok = match exact {
+        Value::Null => true,
+        Value::Object(o) => o
+            .iter()
+            .all(|(id, want)| get(id).is_some_and(|t| json_equals_nbt(want, t))),
+        _ => false,
+    };
+    let partial_ok = match partial {
+        Value::Null => true,
+        Value::Object(o) => o.iter().all(|(id, p)| {
+            let Some(t) = get(id) else {
+                return false;
+            };
+            match &*full(id) {
+                // `CustomDataPredicate`: an `NbtPredicate` on the custom data.
+                "minecraft:custom_data" => {
+                    let pattern = match p {
+                        Value::String(s) => horizon_world::nbt::parse_snbt(s).ok().map(|(t, _)| t),
+                        Value::Object(_) => Some(crate::scoreboard::json_to_tag(p)),
+                        _ => None,
+                    };
+                    pattern.is_some_and(|pat| crate::nbt_path::compare_nbt(&pat, Some(t)))
+                }
+                // `ContainerPredicate`: a `CollectionPredicate` of item
+                // predicates over the non-empty stacks.
+                "minecraft:container" => {
+                    let stacks: Vec<ItemView> = match t {
+                        Tag::List(l) => l
+                            .iter()
+                            .filter_map(|e| match e.get("item") {
+                                Some(Tag::Compound(i)) => Some(nbt_item_view(i)),
+                                _ => None,
+                            })
+                            .filter(|i| i.count > 0 && i.id != "minecraft:air")
+                            .collect(),
+                        _ => Vec::new(),
+                    };
+                    collection(&p["items"], &stacks, |pred, it| item(pred, it, w))
+                }
+                _ => false,
+            }
+        }),
+        _ => false,
+    };
+    exact_ok && partial_ok
+}
+/// `CollectionPredicate`: `contains` (each predicate matched by some
+/// element), `count` (how many match each test) and `size`.
+fn collection<T>(c: &Value, all: &[T], test: impl Fn(&Value, &T) -> bool) -> bool {
+    c["contains"]
+        .as_array()
+        .is_none_or(|l| l.iter().all(|p| all.iter().any(|e| test(p, e))))
+        && c["count"].as_array().is_none_or(|l| {
+            l.iter().all(|entry| {
+                let n = all.iter().filter(|e| test(&entry["test"], e)).count();
+                range_i(&entry["count"], n as i64)
+            })
+        })
+        && range_i(&c["size"], all.len() as i64)
+}
+/// An item stack saved as NBT (`ItemStack.CODEC`: id, count, components) as
+/// predicates see it.
+fn nbt_item_view(i: &horizon_world::nbt::Compound) -> ItemView {
+    use horizon_world::nbt::{JavaString, Tag};
+    let get = |k: &str| i.get(&JavaString::from(k));
+    let comps = |k: &str| match get("components") {
+        Some(c @ Tag::Compound(_)) => c.get(k).cloned(),
+        _ => None,
+    };
+    let int = |t: Option<Tag>| match t {
+        Some(Tag::Byte(v)) => Some(i64::from(v)),
+        Some(Tag::Short(v)) => Some(i64::from(v)),
+        Some(Tag::Int(v)) => Some(i64::from(v)),
+        Some(Tag::Long(v)) => Some(v),
+        _ => None,
+    };
+    let string = |t: Option<&Tag>| match t {
+        Some(Tag::String(s)) => Some(s.to_string_lossy()),
+        _ => None,
+    };
+    // The enchantment map, or its older `levels` wrapper.
+    let enchantments = match comps("minecraft:enchantments") {
+        Some(Tag::Compound(m)) => {
+            let m = match m.get(&JavaString::from("levels")) {
+                Some(Tag::Compound(l)) => l.clone(),
+                _ => m,
+            };
+            m.iter()
+                .filter_map(|(k, v)| {
+                    let lvl = int(Some(v.clone()))?;
+                    Some((full(&k.to_string_lossy()).into_owned(), lvl as u32))
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let potion = match comps("minecraft:potion_contents") {
+        Some(t @ Tag::String(_)) => string(Some(&t)),
+        Some(t @ Tag::Compound(_)) => string(t.get("potion")),
+        _ => None,
+    };
+    ItemView {
+        id: string(get("id")).map_or_else(String::new, |s| full(&s).into_owned()),
+        count: int(get("count").cloned()).map_or(1, |c| c.max(0) as u32),
+        damage: int(comps("minecraft:damage")).map_or(0, |d| d.max(0) as u32),
+        enchantments,
+        potion: potion.map(|p| full(&p).into_owned()),
+        custom_name: comps("minecraft:custom_name").is_some(),
+    }
+}
+/// A component value written in a data pack (JSON) against the same value
+/// saved as NBT: the codec reads both to the same value, so numbers compare
+/// by value whatever their NBT width, booleans are bytes, ids may omit the
+/// `minecraft:` namespace, and a text component may be a bare string.
+fn json_equals_nbt(j: &Value, t: &horizon_world::nbt::Tag) -> bool {
+    use horizon_world::nbt::Tag;
+    let id_like = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| matches!(c, 'a'..='z' | '0'..='9' | '_' | '-' | '.' | '/' | ':'))
+    };
+    let num = |t: &Tag| match t {
+        Tag::Byte(v) => Some(f64::from(*v)),
+        Tag::Short(v) => Some(f64::from(*v)),
+        Tag::Int(v) => Some(f64::from(*v)),
+        Tag::Long(v) => Some(*v as f64),
+        Tag::Float(v) => Some(f64::from(f32::from_bits(*v))),
+        Tag::Double(v) => Some(f64::from_bits(*v)),
+        _ => None,
+    };
+    let list = |a: &[Value], items: Vec<Tag>| {
+        a.len() == items.len() && a.iter().zip(&items).all(|(j, t)| json_equals_nbt(j, t))
+    };
+    match (j, t) {
+        (Value::Bool(b), Tag::Byte(v)) => i8::from(*b) == *v,
+        (Value::Number(n), _) => n.as_f64().zip(num(t)).is_some_and(|(a, b)| a == b),
+        (Value::String(a), Tag::String(b)) => {
+            let b = b.to_string_lossy();
+            *a == b || (id_like(a) && id_like(&b) && full(a) == full(&b))
+        }
+        // A plain text component: `"x"` and `{text:"x"}` are the same.
+        (Value::String(a), Tag::Compound(c)) => {
+            c.len() == 1
+                && t.get("text")
+                    .is_some_and(|b| json_equals_nbt(&Value::String(a.clone()), b))
+        }
+        (Value::Object(o), Tag::String(_)) => {
+            o.len() == 1 && o.get("text").is_some_and(|a| json_equals_nbt(a, t))
+        }
+        (Value::Array(a), Tag::List(l)) => list(a, l.clone()),
+        (Value::Array(a), Tag::ByteArray(b)) => {
+            list(a, b.iter().map(|v| Tag::Byte(*v as i8)).collect())
+        }
+        (Value::Array(a), Tag::IntArray(b)) => list(a, b.iter().map(|v| Tag::Int(*v)).collect()),
+        (Value::Array(a), Tag::LongArray(b)) => list(a, b.iter().map(|v| Tag::Long(*v)).collect()),
+        (Value::Object(o), Tag::Compound(c)) => {
+            o.len() == c.len()
+                && o.iter()
+                    .all(|(k, v)| t.get(k).is_some_and(|tv| json_equals_nbt(v, tv)))
+        }
+        _ => false,
+    }
 }
 /// `LocationPredicate`.
 pub fn location(v: &Value, p: [f64; 3], w: &dyn World) -> bool {
@@ -2070,5 +2261,139 @@ mod tests {
             date_millis("2026-10-17 05:30:00 +0000")
         );
         assert_eq!(date_millis("not a date"), None);
+    }
+    /// A chest named `Vault` with three diamonds in its first slot and some
+    /// custom data left from the item it was placed from, its components
+    /// collected as `BlockEntity.collectComponents` does.
+    struct VaultChest;
+    impl World for VaultChest {
+        fn dimension(&self) -> &str {
+            Flat.dimension()
+        }
+        fn weather(&self) -> (bool, bool) {
+            Flat.weather()
+        }
+        fn biome(&self, p: [i32; 3]) -> String {
+            Flat.biome(p)
+        }
+        fn structures(&self, p: [i32; 3]) -> Vec<String> {
+            Flat.structures(p)
+        }
+        fn block(&self, _: [i32; 3]) -> (String, BTreeMap<String, String>) {
+            ("minecraft:chest".into(), BTreeMap::new())
+        }
+        fn block_entity_components(&self, _: [i32; 3]) -> Option<horizon_world::nbt::Compound> {
+            let saved = horizon_world::nbt::parse_snbt(
+                r#"{id:"minecraft:chest",x:0,y:0,z:0,CustomName:"Vault",
+                    Items:[{Slot:0b,id:"minecraft:diamond",count:3}],
+                    components:{"minecraft:custom_data":{key:1b,other:"x"}}}"#,
+            )
+            .ok()?
+            .0;
+            Some(crate::block_entity_item::collected_components(&saved))
+        }
+        fn fluid(&self, p: [i32; 3]) -> Option<String> {
+            Flat.fluid(p)
+        }
+        fn can_see_sky(&self, p: [i32; 3]) -> bool {
+            Flat.can_see_sky(p)
+        }
+        fn light(&self, p: [i32; 3]) -> i32 {
+            Flat.light(p)
+        }
+        fn smokey(&self, p: [i32; 3]) -> bool {
+            Flat.smokey(p)
+        }
+        fn in_tag(&self, r: &str, t: &str, id: &str) -> bool {
+            Flat.in_tag(r, t, id)
+        }
+    }
+    /// `BlockPredicate.matchesBlockEntity`: exact `components` must equal the
+    /// block entity's collected components.
+    #[test]
+    fn a_block_predicates_exact_components_test_the_block_entity() {
+        let chest = |components: Value| serde_json::json!({"blocks": "minecraft:chest", "components": components});
+        let at = |v: &Value| block(v, [0, 0, 0], &VaultChest);
+        assert!(at(&chest(
+            serde_json::json!({"minecraft:custom_name": "Vault"})
+        )));
+        assert!(at(&chest(
+            serde_json::json!({"custom_name": {"text": "Vault"}})
+        )));
+        assert!(at(&chest(serde_json::json!({
+            "minecraft:container": [{"slot": 0, "item": {"id": "diamond", "count": 3}}]
+        }))));
+        assert!(
+            !at(&chest(
+                serde_json::json!({"minecraft:custom_name": "Vaults"})
+            )),
+            "another name"
+        );
+        assert!(
+            !at(&chest(serde_json::json!({
+                "minecraft:container": [{"slot": 0, "item": {"id": "diamond", "count": 2}}]
+            }))),
+            "another count"
+        );
+        assert!(
+            !at(&chest(
+                serde_json::json!({"minecraft:custom_data": {"key": true}})
+            )),
+            "exact data must be the whole value, not a part"
+        );
+        assert!(
+            !at(&chest(serde_json::json!({"minecraft:lock": {}}))),
+            "a component the chest has not got"
+        );
+    }
+    /// `predicates`: the partial tests on the block entity's components.
+    #[test]
+    fn a_block_predicates_partial_predicates_test_the_block_entity() {
+        let chest = |predicates: Value| serde_json::json!({"blocks": "minecraft:chest", "predicates": predicates});
+        let at = |v: &Value| block(v, [0, 0, 0], &VaultChest);
+        let contains = |item: Value| {
+            chest(serde_json::json!({"minecraft:container": {"items": {"contains": [item]}}}))
+        };
+        assert!(at(&contains(
+            serde_json::json!({"items": "minecraft:diamond", "count": {"min": 3}})
+        )));
+        assert!(!at(&contains(
+            serde_json::json!({"items": "minecraft:emerald"})
+        )));
+        assert!(!at(&contains(
+            serde_json::json!({"items": "minecraft:diamond", "count": {"min": 4}})
+        )));
+        assert!(at(&chest(
+            serde_json::json!({"minecraft:container": {"items": {"size": 1}}})
+        )));
+        assert!(!at(&chest(
+            serde_json::json!({"minecraft:container": {"items": {"size": 2}}})
+        )));
+        assert!(at(&chest(
+            serde_json::json!({"minecraft:custom_data": "{key:1b}"})
+        )));
+        assert!(!at(&chest(
+            serde_json::json!({"minecraft:custom_data": "{key:2b}"})
+        )));
+        assert!(
+            !at(&chest(
+                serde_json::json!({"minecraft:damage": {"damage": 0}})
+            )),
+            "a component the chest has not got"
+        );
+    }
+    /// Without a block entity, a `components` or `predicates` test fails,
+    /// while a predicate without them still matches the block.
+    #[test]
+    fn block_entity_component_tests_fail_without_a_block_entity() {
+        let at = |v: Value| block(&v, [0, 0, 0], &Flat);
+        assert!(at(serde_json::json!({"blocks": "minecraft:stone"})));
+        assert!(!at(
+            serde_json::json!({"blocks": "minecraft:stone", "components": {}})
+        ));
+        assert!(!at(serde_json::json!({
+            "blocks": "minecraft:stone",
+            "predicates": {"minecraft:custom_data": "{}"}
+        })));
     }
 }
