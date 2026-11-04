@@ -13,7 +13,7 @@ advisor: used (once before deciding, once before finishing).
   list issues or read the review of #8662. Instead I fetched `refs/pull/*/head` over anonymous git and diffed every
   PR head newer than 2026-10-25 that is not in main, looking for `expected` lines in `advancements.rs` / `loot.rs`.
   Hits: `pr/2475` ("Integration: rustfmt"), an old integration branch that carries the old line, and `pr/6488`
-  ("Delete packaging directory"), which deletes the whole tree. Neither is a fix.
+  ("Delete packaging directory"), which deletes the whole tree. Neither is a fix. The scan finished with no other hits.
 - Open issues: not checkable here (API blocked). The coordinator should search for "TagPredicate" or "expected".
 
 ## Vanilla (not checked: no jar in this session)
