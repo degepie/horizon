@@ -17,6 +17,11 @@ statistics, advancement progress, known recipes) is filled only for the triggers
 ordinary play copies nothing. A part that wasn't filled fails the predicate that asks for it: another player's view
 (a rider, a command target that is a guest, a guest killer) carries none of these records.
 
+Commands test a predicate on a player in several places: `execute if predicate`, a selector's `predicate=`, item
+modifiers and conditions. There, `facts_asked_in` scans the predicate and fills only what it names. A player who
+is not in place (`Target::Guest`, which includes single player's own player in a tick function) reads their own
+records from the hub.
+
 The killer view in `damage_view` and the thrown-item pickup view now go through `player_entity_for_any`, so their
 criteria get the same facts.
 

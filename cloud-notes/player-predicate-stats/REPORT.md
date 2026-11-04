@@ -64,28 +64,61 @@ Nothing was claimed.
 - `inventory_changed` + `player` is verified by reading only: no Game-level test.
 - No in-game run with BACAP.
 
+## Command predicates (coordinator review)
+
+- `player_entity()` no longer fills anything. The command paths now call `entity_view_asked(t, &json)` or
+  `entity_view_asking(t, asked)`, which fill only what the predicate they test may ask:
+  - `functions.rs` `check_predicate` (`execute if predicate`);
+  - `commands/compute.rs` (conditions);
+  - `commands/items.rs` ×2 (item modifiers);
+  - `scoreboard.rs` selector `predicate=`, the union over the selector's predicates.
+- What a predicate may ask comes from `adv::facts_asked_in(&Value)`. It walks the JSON with no allocation and
+  reads the fields of each `type_specific/player` object. A `minecraft:reference` gives all four: a condition
+  `condition`/`type`, or an item modifier `function`.
+- Unit test `a_command_predicate_asks_only_the_player_facts_it_names` covers the "not asked → not filled" decision
+  on this path, including a modifier whose `levels` sits outside any player predicate.
+  - There is no `Game` test fixture, so the wiring at the 5 call sites was checked by reading.
+- `entity_view_of` is still used by the `looking_at` target path. There the player view gets no facts, because a
+  player never looks at itself.
+
+## LAN guests and single player
+
+Single player's own player is a hub guest on the server thread (`integrated.rs`: "the hub runs without a host").
+
+- **Triggers** (all of them: `tick`, `location`, `inventory_changed`, `player_killed_entity`, …):
+  - they run inside `as_guest`, and `enter_guest` swaps in the guest's `adv.progress`, recipe book, `stats` and
+    `experience`;
+  - so `player_entity_for` fills that guest's own records;
+  - guests do get facts there, not fail closed.
+- **Commands where the player in place is the source** (a guest's own command, a function run as them in their
+  turn): `Target::Player`, the guest's swapped records. They get facts.
+- **Commands on another player** (`Target::Guest`): for example a tick or scheduled function, which runs with the
+  server as source, doing `execute as @a if predicate …`. That includes single player's own player.
+  - At first these got no facts, which failed closed.
+  - They now get their own records: `guest_facts` reads `Guest.xp_level`, `Guest.advancements`,
+    `Guest.recipe_book` and `host.play[conn].stats` (stats only if `loaded`).
+  - Selectors leave out the guest in place, and `guest_facts` also refuses `lan_acting == conn`, so it never reads
+    stale hub copies.
+  - Advancements use `self.adv.tree`. If no guest turn has loaded the tree yet, an asked advancement is unknown
+    and fails.
+- **Still no facts (fail closed):**
+  - the `EntityView`s built by hand for other guests inside trigger handlers: the guest killed in
+    `lan_actions.rs` ~4011 (for `kill_mob_near_sculk_catalyst` / killed views) and a guest killer at ~4042;
+  - `rider_entity` (a boat's passenger);
+  - native mod criteria (`native_criteria.rs`).
+  - Before this change, criteria asking stats/advancements/recipes/level passed for them. Now they fail.
+
 ## Cost and risks
 
-- With no pack asking (vanilla's own tree), `player_facts_asked` returns nothing for every trigger and nothing is
-  copied.
-- With BACAP, a trigger whose criteria ask clones the whole stats map, progress map or recipe set each time it
-  fires. That is `tick` every tick, if BACAP's milestones use `tick` (I could not check). This was not measured.
-  - A zero-copy alternative: a `World` method returning the acting player's records, plus a flag on `EntityView`
-    for "this is the acting player".
-  - A narrower one: index the exact ids asked and copy only those.
-- Fail closed: some player views carry no facts, so criteria that ask about stats, advancements, recipes or
-  level never pass for them. Before this change, those criteria passed for everyone. The views are:
-  - another guest (`entity_view_of` `Target::Guest`; the killer guest in `lan_actions.rs` around line 4011);
-  - a rider (`rider_entity`);
-  - native mod criteria (`native_criteria.rs`).
-
-## Size and commits
-
-- 473 lines in `crates/` (`advancements.rs` +~390, of which ~300 are tests). The code part is ~170 lines.
-- The task asked for two commits past ~400 lines. I pushed the code as one commit before measuring, and the rules
-  forbid force-push, so the split is not in history. For two PRs, split by hunk: the `check_inventory_trigger`
-  hunk (the `list.is_empty()` early return, `me`, `adv::conditions(&c["player"]…)`) is self-contained.
-- pr_ready's "531 lines of code" counts `cloud-notes/` too.
+- Vanilla's own tree asks for none of these, so no trigger copies anything. A command predicate that names none
+  of the fields copies nothing.
+- When asked, the whole map is cloned:
+  - a trigger whose criteria ask clones on every fire, which for BACAP may be `tick` every tick if its
+    milestones use it (unchecked);
+  - a command predicate that asks clones on every check.
+  - Not measured.
+- To make the asked case cheaper: put `Progress`/`Stats` behind `Arc` snapshots, or index the exact ids asked.
+  Both are larger changes to the game's records.
 
 ## Overlaps with open PRs
 
@@ -95,4 +128,4 @@ Nothing was claimed.
 
 ## advisor
 
-Used once, before the approach. It suggested this copy design; the user's task asked for the same.
+Used once, before the approach. It suggested this copy design; the user's task asked for the same. Used again before finishing (below).
