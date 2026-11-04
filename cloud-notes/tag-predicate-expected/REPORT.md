@@ -12,8 +12,8 @@ advisor: used (once before deciding, once before finishing).
 - Open PRs: the GitHub API (REST and GraphQL) for horizon-rust/horizon is blocked in this session, so I could not
   list issues or read the review of #8662. Instead I fetched `refs/pull/*/head` over anonymous git and diffed every
   PR head newer than 2026-10-25 that is not in main, looking for `expected` lines in `advancements.rs` / `loot.rs`.
-  The only hit, `pr/2475` ("Integration: rustfmt"), is an old integration branch that carries the old line. It is
-  not a fix.
+  Hits: `pr/2475` ("Integration: rustfmt"), an old integration branch that carries the old line, and `pr/6488`
+  ("Delete packaging directory"), which deletes the whole tree. Neither is a fix.
 - Open issues: not checkable here (API blocked). The coordinator should search for "TagPredicate" or "expected".
 
 ## Vanilla (not checked: no jar in this session)
@@ -65,8 +65,9 @@ are not the same:
 | `expected` | treated as `true` | treated as `false` |
 | `id` | `id_matches(Null)` matches any damage type (`advancements.rs:541`) | `""` matches nothing |
 
-The loot side also builds its own tag test instead of reusing `id_matches` (a list or `HolderSet` `id` is not
-handled there). Vanilla has no answer for which default is right, because it rejects both files. Aligning them
+The loot side also builds its own tag test instead of reusing `id_matches`, so it reads only a string `id`.
+The advancement side's comment (`advancements.rs:933`) calls `id` a `HolderSet`. Expected from `TagPredicate.codec`:
+`id` is a single tag key. Not verified. Vanilla has no answer for which default is right, because it rejects both files. Aligning them
 is a pure Horizon-consistency cleanup with no vanilla effect on valid data, so I left it out of this task. If the
 coordinator wants it, the smallest version is to make loot's `expected` default `true`, like advancements and #8662.
 
@@ -74,3 +75,8 @@ coordinator wants it, the smallest version is to make loot's `expected` default 
 
 - The vanilla behaviour above (no jar, no `rea_vanilla.py`, no game here).
 - Open upstream issues, and the exact text of the #8662 review.
+- Question for the coordinator: both Horizon paths treat an `id` without `#` as one damage-type id and only a
+  `#`-prefixed one as a tag. The only fixtures in the repo (`advancements.rs:1606`, `:1883`) write
+  `#minecraft:is_projectile`. Check vanilla's datagen output (e.g. `entity_hurt_player` advancements) to see
+  whether a serialized `TagPredicate` id has the `#`. If it does not, valid vanilla data would take the bare-id
+  branch in both files.
