@@ -48,12 +48,27 @@ none
 
 `python3 tools/pr_ready.py --quick --base upstream/main` (no `.local/` resources here):
 
-```
-SELF_CHECK_PLACEHOLDER
-```
+
+| Check | Result |
+| --- | --- |
+| Scope | ✅ 5 files, +331 −81 |
+| Cargo.lock | ✅ unchanged |
+| Public tree | ✅ |
+| Python tests | ✅ 644 passed (1 min 20 s) |
+| rustfmt | ✅ (16 s) |
+| Rust | ⚠️ 1.97.0 is older than CI's stable (1.99): clippy may flag lints CI doesn't, update with `rustup update` |
+| clippy | ❌ failed; likely the old Rust above (33 s) |
+| tests: horizon-client, horizon-client-lib | ✅ 2680 passed (1 min 45 s) |
+| doc tests | ✅ 0 passed (6 s) |
+| content root tests | ➖ content root untouched |
+| tokens.css up to date | ➖ theme untouched |
+| launcher rustfmt | ➖ launcher untouched |
+| launcher clippy | ➖ launcher untouched |
+| launcher tests | ➖ launcher untouched |
+| Parity | ➖ not run (--quick): CI's parity job picks the affected harnesses |
 
 clippy fails on upstream/main's own lint at `crates/horizon-world/src/worldgen/aquifer/noise_based.rs:476`
-(`manual_range_contains`, clippy 1.97), not on this change. `cargo clippy -p horizon-client -p horizon-client-lib
+(`manual_range_contains`, clippy 1.97 here; CI runs 1.99), not on this change. Scope counts the `cloud-notes/` files too. `cargo clippy -p horizon-client -p horizon-client-lib
 --all-targets` reports no warnings in the changed files. `cargo test -p horizon-client-lib --lib
 advancements::tests::`: 27 passed, 1 ignored (needs the prepared resources).
 
