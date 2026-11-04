@@ -11,7 +11,7 @@ Mobs, spawning, potions, shields and enchantment conditions tested entity type, 
 - Gameplay callers moved off `res.mob_data()` / `res.stations()`: farm-animal variants, golden dandelion, the player's `#is_projectile` check, beehives, boats, wandering traders, drowned, potions, potent sulfur, bells, the dragon, shields.
 - `Enchantments::load_with` reads entity and damage type tags with the world's overlay.
 
-Left on purpose: F3 tag lines (client side, #8497), `/execute if biome` (already reads packs), structure mobs in generation workers, the hardcoded `DamageKind::bypasses_*` and the player damage tag catalog (#8917).
+Left on purpose: F3 tag lines (client side, #8497), `/execute if biome` and loot predicates (already read packs), structure mobs in generation workers, the hardcoded `DamageKind::bypasses_*` and the player damage tag catalog (#8917).
 
 ## Kind
 

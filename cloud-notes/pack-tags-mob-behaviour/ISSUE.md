@@ -7,6 +7,8 @@ reads only the game's own tags, never the world's data packs.
 
 ## Minimal repro
 
+Not run in game in this session: the outcomes below are read from the code paths under Actual.
+
 A data pack `ghost` in a new world (`datapacks/ghost/`):
 
 ```

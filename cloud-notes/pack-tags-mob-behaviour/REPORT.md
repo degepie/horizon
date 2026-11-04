@@ -1,6 +1,6 @@
 # Report: pack tags for mob behaviour and combat
 
-advisor: rate-limited in this cloud session at the approach check; not consulted (see end).
+advisor: rate-limited at the approach check; consulted once before finishing (its fixes applied: this line, ISSUE.md provenance, the loot caller below).
 
 ## Prior work (2026-11-04, REST search; the GraphQL `gh pr list` is blocked here)
 - #9403 (degepie, open, `fix/dp-entity-tags`) / issue #9402: advancement predicates only. **This branch carries
@@ -45,6 +45,9 @@ game: `creatures.rs` biome_facts (farm-animal variants), golden dandelion (`cann
 - `game/debug_lines.rs:93` F3 entity tag lines: drawn by the window client; client tags from the server are #8497.
 - `game/advancements.rs` `in_tag` fallback: #9403 already reads `pack_tags` first.
 - `game/commands/execute.rs` `biome_tag_has`: already reads the world's packs (`tag_entries`).
+- Loot predicates (`horizon-world/src/loot.rs` `LootData::in_tag`, used by `damage_source_properties` and
+  `entity_properties` in loot tables): already read the world's packs (`LootData::load` merges
+  `overlay.tag_kind` for item, enchantment, instrument, entity_type and damage_type).
 - `vanillagen/structure_mobs.rs:97`: structure mobs finalized in the generation workers, which have no world tables.
 - `mod_content.rs:2279`: content-mod build-time biome tags, not world packs.
 - `mobs.rs` `DamageKind::bypasses_*`, `Damage::bypasses_armor` etc.: hardcoded per-kind matches, not tag lookups;
