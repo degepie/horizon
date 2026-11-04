@@ -95,6 +95,46 @@ impl FactsAsked {
         }
     }
 }
+/// What `v` (a predicate, a list of conditions or an item modifier) may ask
+/// of the player's level, statistics, advancements and recipes: the fields
+/// of its player predicates, and all four for a `minecraft:reference` to a
+/// predicate file. Walked without reading anything else, for the commands
+/// that test a predicate on the player.
+pub fn facts_asked_in(v: &Value) -> FactsAsked {
+    let mut asked = FactsAsked::default();
+    let mut todo = vec![v];
+    while let Some(v) = todo.pop() {
+        match v {
+            Value::Array(list) => todo.extend(list),
+            Value::Object(o) => {
+                // A predicate file, or (`function`) an item modifier file.
+                let kind =
+                    (o.get("condition").or_else(|| o.get("type"))).or_else(|| o.get("function"));
+                if kind
+                    .and_then(Value::as_str)
+                    .is_some_and(|k| full(k) == "minecraft:reference")
+                {
+                    return FactsAsked::ALL;
+                }
+                for (key, value) in o {
+                    if full(key) == "minecraft:type_specific/player"
+                        && let Some(p) = value.as_object()
+                    {
+                        asked = asked.or(FactsAsked {
+                            level: p.contains_key("level"),
+                            stats: p.contains_key("stats"),
+                            advancements: p.contains_key("advancements"),
+                            recipes: p.contains_key("recipes"),
+                        });
+                    }
+                    todo.push(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    asked
+}
 fn frame(v: &Value) -> Frame {
     match v.as_str() {
         Some("goal") => Frame::Goal,
@@ -2515,6 +2555,72 @@ mod tests {
         );
         assert_eq!(tree.player_facts_asked("minecraft:recipe_unlocked"), none);
         assert_eq!(tree.player_facts_asked("minecraft:using_item"), none);
+    }
+    #[test]
+    fn a_command_predicate_asks_only_the_player_facts_it_names() {
+        let player = |p: Value| {
+            json!({"condition": "minecraft:entity_properties", "entity": "this",
+                "predicate": {"type_specific/player": p}})
+        };
+        let none = FactsAsked::default();
+        for (v, expected) in [
+            // Nothing of the player's records: nothing copied.
+            (
+                json!({"condition": "minecraft:entity_properties", "entity": "this",
+                "predicate": {"flags": {"is_sneaking": true}}}),
+                none,
+            ),
+            (player(json!({"gamemode": ["survival"]})), none),
+            (
+                json!({"condition": "minecraft:random_chance", "chance": 0.5}),
+                none,
+            ),
+            // A field named elsewhere than in a player predicate.
+            (
+                json!({"function": "minecraft:enchant_with_levels", "levels": 30,
+                "conditions": [{"condition": "minecraft:inverted",
+                "term": {"condition": "minecraft:entity_properties", "entity": "this",
+                "predicate": {"minecraft:effects": {"minecraft:speed": {}}}}}]}),
+                none,
+            ),
+            (
+                player(json!({"level": {"min": 3}})),
+                FactsAsked {
+                    level: true,
+                    ..none
+                },
+            ),
+            // Nested in a list, under `inverted`, in an item modifier.
+            (
+                json!([{"function": "minecraft:set_count", "count": 2, "conditions": [
+                    {"condition": "minecraft:inverted", "term": player(json!({
+                        "stats": [], "recipes": {"minecraft:bread": true}}))}]}]),
+                FactsAsked {
+                    stats: true,
+                    recipes: true,
+                    ..none
+                },
+            ),
+            (
+                json!({"condition": "minecraft:all_of", "terms": [player(json!(
+                    {"advancements": {"minecraft:story/root": true}}))]}),
+                FactsAsked {
+                    advancements: true,
+                    ..none
+                },
+            ),
+            // A predicate file could ask anything.
+            (
+                json!({"condition": "reference", "name": "pack:p"}),
+                FactsAsked::ALL,
+            ),
+            (
+                json!([{"function": "minecraft:reference", "name": "pack:m"}]),
+                FactsAsked::ALL,
+            ),
+        ] {
+            assert_eq!(facts_asked_in(&v), expected, "{v}");
+        }
     }
     #[test]
     fn saved_dates_read_back_to_their_instant() {
