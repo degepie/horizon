@@ -1,6 +1,7 @@
 # loot-location-check: report for the coordinator
 
 advisor: available and used (before the design, and before finishing).
+Branch: pushed to `cloud/loot-location-check` as instructed (not the harness's `claude/…` branch name).
 
 ## Prior work
 
@@ -35,7 +36,11 @@ caller: no origin position, no offsets, no other field, no biome tags (LootData 
 - Callers: fishing (hook position), `/data`-set container tables and chest minecarts (game `LootView`: the
   real level, biome read as before via `biome_name_at`); chests rolled from a generating or loading chunk
   (`structure_blocks::block_entities`, `save::roll_loaded_loot`) only know the biome (`KnownBiome`), so
-  any other field fails there, as before. Container origin is the block centre (expected from
+  any other field fails there. **Behaviour change:** before, those fields were ignored (passed); now they fail.
+  Vanilla would test them (it unpacks on first open with the level loaded, expected from
+  `RandomizableContainer.unpackLootTable`); Horizon rolls at generation and cannot. Fail-closed avoids a
+  made-up answer. Follow-up: `save::roll_loaded_loot` holds a loaded `Chunk`, so a chunk-backed view could
+  answer `block`/`fluid` there. Container origin is the block centre (expected from
   `RandomizableContainer.unpackLootTable`).
 
 ## Verified

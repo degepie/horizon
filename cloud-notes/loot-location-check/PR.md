@@ -11,7 +11,7 @@ The predicate is shared, not copied: `LocationPredicate` and `BlockPredicate` mo
 `advancements.rs` to a new `horizon-world/src/location_predicate.rs` over a `PredicateWorld` trait;
 advancements keep their signatures and wrap it through an adapter. The loot engine takes a `LootOrigin`
 (position + world view) instead of a biome string; fishing, `/data`-set containers and chest minecarts pass
-the level, chests rolled from a chunk's data pass a view that knows only the biome (other fields fail there).
+the level, chests rolled from a chunk's data pass a view that knows only the biome (other fields fail there, where they passed before).
 Biome, structure, block and fluid tags now load with the loot data, packs included.
 
 Fixes #TBD
