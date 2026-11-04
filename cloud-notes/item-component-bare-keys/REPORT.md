@@ -33,7 +33,7 @@ check already does.
 - `cargo clippy -p horizon-client-lib --all-targets -- -D warnings`: the local clippy 1.97 flags
   `clippy::manual_range_contains` in `horizon-world` (code this branch doesn't touch). CI uses the newest
   stable. With `-A clippy::manual_range_contains` it is clean.
-- pr_ready: see PR.md's Self-check.
+- pr_ready --quick: everything green except clippy (only the old-toolchain lint above); table in PR.md.
 
 ## Not verified
 

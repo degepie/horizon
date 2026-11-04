@@ -47,6 +47,24 @@ none
 
 ## Self-check
 
-SELF_CHECK_PLACEHOLDER
+**pr_ready** (`tools/pr_ready.py --quick --base upstream/main` on vm, against upstream/main at 1989b1b59, 3 min 24 s)
+
+| Check | Result |
+| --- | --- |
+| Scope | ✅ 3 files, +156 −5 (includes cloud-notes; the code diff is 1 file) |
+| Cargo.lock | ✅ unchanged |
+| Public tree | ✅ |
+| Python tests | ✅ 644 passed (1 min 27 s) |
+| rustfmt | ✅ (14 s) |
+| Rust | ⚠️ 1.97.0 is older than CI's stable (1.99): clippy may flag lints CI doesn't, update with `rustup update` |
+| clippy | ❌ failed; likely the old Rust above (39 s) |
+| tests: horizon-client-lib | ✅ 1773 passed (2 min 27 s) |
+| doc tests | ✅ 0 passed (3 s) |
+| content root tests | ➖ content root untouched |
+| Parity | ➖ not run (--quick): CI's parity job picks the affected harnesses |
+
+The clippy failure is `clippy::manual_range_contains` at `crates/horizon-world/src/worldgen/aquifer/noise_based.rs:476`,
+which this branch does not touch, flagged by the old 1.97 clippy. `cargo clippy -p horizon-client-lib --all-targets
+-- -D warnings -A clippy::manual_range_contains` is clean. To be rerun on current stable before publishing.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
