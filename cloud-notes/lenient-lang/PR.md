@@ -16,8 +16,12 @@ parser). It also skips a leading byte order mark, as `JsonReader` does. Values f
 `GsonHelper.convertToString`: strings, numbers and booleans read as text; a null, array or object ends the file at
 that entry. A file that is not JSON even to Gson still adds nothing.
 
-Checked against BACAP Language Pack 1.21 (not committed): all 31 files now load, each with as many keys as it has
-`"key":` lines (3000-3621).
+One change for valid JSON: a lang file with a number, boolean or null value used to be dropped whole; now numbers
+and booleans load as text and a null, array or object stops the file at that entry (deliberate, per
+`convertToString`). Files whose values are all strings read exactly as before.
+
+Checked against BACAP Language Pack 1.21 (not committed): all 31 files now load, each with as many keys as it has distinct
+`"name":` lines (3000-3621); the `#[ignore]`d test `every_lang_file_of_a_pack_reads` checks that count.
 
 ## Kind
 
@@ -35,7 +39,8 @@ Expected from `Language.loadFromJson` (Gson `fromJson` → lenient `JsonReader`)
 not checked against the 26.3 jar from this environment. The lenient grammar is the one
 `horizon_world::datafix::json` already ports from `JsonReader`.
 
-No harness: lang loading has none; unit tests in `lang.rs` cover each syntax case and that a strict file reads as
+No harness: none checks lang loading (`tools/parity.py --changed-files` without dep-info records falls back to
+416 of 417 harnesses, so it gives no narrower answer here); unit tests in `lang.rs` cover each syntax case and that a strict file reads as
 `serde_json` reads it.
 
 ## Other projects' code

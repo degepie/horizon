@@ -21,13 +21,17 @@ in strings; unknown escapes; `=`/`=>` name separators; `;` member separators; ca
 Still rejected (Gson rejects them too): trailing comma before `}`, missing comma between members, unterminated
 objects/strings.
 
+Behaviour change for valid JSON: a file with a number/boolean/null value was dropped whole before; now
+numbers/booleans load as text and null/array/object stops the file there. All-string files: unchanged.
+
 ## Verified
 - Unit tests (lang.rs): plain JSON == serde result (incl. duplicate keys last-wins); each comment form; unquoted
   and single-quoted; raw tab/newline; `=`/`=>`/`;` + BOM; trailing comma rejected; numbers/bools as text;
   non-primitive truncation; not-JSON files add nothing; a commented pack file layers over English via `load`.
 - BACAP Language Pack 1.21 (Modrinth, sha256 63b82a42…a864, same as the audit) — all 31 files load via the
   `#[ignore]`d test `every_lang_file_of_a_pack_reads` (`HORIZON_LANG_PACK_DIR=<pack>/assets/minecraft/lang`).
-  Every file's key count equals the number of unique `"key":` lines (Python regex), so nothing is truncated.
+  The test asserts every file's key count equals its distinct `"name":` lines (independent count), so nothing
+  is truncated; all 31 equal.
   The 6 "other syntax" files: de_de, tr_tr, rpr = raw control chars in strings; ko_kr, uk_ua = `#` comment after
   a value on the same line; zh_tw = one unquoted value followed by `""` (Gson's unquoted literal does not stop at
   `"`, so the value keeps a trailing `""`; expected to show the same in vanilla).
@@ -39,7 +43,9 @@ objects/strings.
 - Not checked against the 26.3 jar (no jar here): that `Language.loadFromJson` really goes lenient (Gson
   `fromJson(Reader)` reads lenient unless the Gson instance is set strict), and the non-primitive/truncation
   behaviour. Coordinator: `rea_vanilla.py method net.minecraft.locale.Language loadFromJson`.
-- No in-game check (no GPU/resources). Parity harnesses not run.
+- No in-game check (no GPU/resources). Parity harnesses not run; `parity.py --changed-files --list` here (no
+  dep-info records) selects 416/417, i.e. no narrowing. None is expected to cover lang loading.
+- Branch: pushed `cloud/lenient-lang` as asked (CLOUD-AGENT.md rule 2), not the harness's `claude/lenient-lang-parser-kfxnnh`.
 - Not covered: Gson's `)]}'` non-execute prefix (the port lacks it; no pack seen using it); `\uD800` lone
   surrogates become U+FFFD (Java keeps them). `deprecated.json` and `pack.mcmeta` language lists stay strict.
 - Overlaps: only `lang.rs` `Language::load`; no open PR found touching it.

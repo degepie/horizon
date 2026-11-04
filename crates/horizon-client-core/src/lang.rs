@@ -1034,8 +1034,31 @@ mod tests {
             let strict = serde_json::from_slice::<HashMap<String, String>>(&bytes).is_ok();
             let mut map = HashMap::new();
             read_lang_file(&bytes, &mut map);
-            println!("{}: strict {strict}, {} keys", path.display(), map.len());
-            if map.is_empty() {
+            // An independent count: the distinct `"name":` that start a line.
+            let text = String::from_utf8_lossy(&bytes);
+            let names: std::collections::HashSet<&str> = text
+                .lines()
+                .filter_map(|line| {
+                    let rest = line.trim_start().strip_prefix('"')?;
+                    let mut escaped = false;
+                    let end = rest.char_indices().find_map(|(i, c)| {
+                        let close = c == '"' && !escaped;
+                        escaped = c == '\\' && !escaped;
+                        close.then_some(i)
+                    })?;
+                    rest[end + 1..]
+                        .trim_start()
+                        .starts_with(':')
+                        .then(|| &rest[..end])
+                })
+                .collect();
+            println!(
+                "{}: strict {strict}, {} keys, {} names",
+                path.display(),
+                map.len(),
+                names.len()
+            );
+            if map.is_empty() || map.len() != names.len() {
                 failed.push(path);
             }
         }
