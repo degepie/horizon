@@ -2780,9 +2780,21 @@ impl Minecart {
         tag
     }
     pub fn from_nbt(tag: &horizon_world::nbt::Tag, id: u32, kind: CartKind) -> Option<Self> {
+        let (position, _, _) = horizon_client::entity_nbt::boat_from_nbt(tag)?;
+        let mut c = Self::new(id, kind, position);
+        c.load(tag)?;
+        Some(c)
+    }
+    /// `Entity.load` on this cart: the saved fields are read over the live
+    /// ones, the rest (riders, lerp, hurt state) stays; its kind never changes.
+    /// `None`, with nothing changed, when the compound has no position.
+    pub fn load(&mut self, tag: &horizon_world::nbt::Tag) -> Option<()> {
         use horizon_world::nbt::Tag;
         let (position, velocity, yaw) = horizon_client::entity_nbt::boat_from_nbt(tag)?;
-        let mut c = Self::new(id, kind, position);
+        let kind = self.kind;
+        let c = self;
+        c.position = position;
+        c.previous = position;
         c.velocity = velocity;
         c.yaw = yaw;
         c.previous_yaw = yaw;
@@ -2826,7 +2838,7 @@ impl Minecart {
                 tag,
             )));
         }
-        Some(c)
+        Some(())
     }
 }
 
@@ -2952,6 +2964,40 @@ mod tests {
         let out = cart.to_nbt([0; 4], None);
         assert_eq!(out.get("DisplayState"), Some(&state));
         assert_eq!(out.get("DisplayOffset"), Some(&Tag::Int(10)));
+    }
+
+    /// `/data merge entity` on a cart: `EntityDataAccessor.setData` loads the
+    /// merged compound into the live cart (`Entity.load`). Its display state,
+    /// offset and name read back; its id, kind and unsaved state stay.
+    #[test]
+    fn data_merge_loads_into_a_live_cart() {
+        let mut cart = Minecart::new(7, CartKind::Chest, Vec3::new(1.5, 64.0, 2.5));
+        cart.hurt_time = 5;
+        let old = cart.to_nbt([0; 4], None);
+        let (patch, _) = horizon_world::nbt::parse_snbt(
+            r#"{DisplayState:{Name:"minecraft:furnace"},DisplayOffset:3,CustomName:"Cart",Pos:[1.5d,70.0d,2.5d]}"#,
+        )
+        .unwrap();
+        let merged = horizon_client::data_cmd::merged(&old, &patch);
+        cart.load(&merged).unwrap();
+        assert_eq!(
+            (cart.id, cart.kind, cart.hurt_time),
+            (7, CartKind::Chest, 5)
+        );
+        assert_eq!(cart.position, Vec3::new(1.5, 70.0, 2.5));
+        assert_eq!(display_offset(&cart), 3.0);
+        let out = cart.to_nbt([0; 4], Some(&merged));
+        assert_eq!(out.get("DisplayState"), patch.get("DisplayState"));
+        assert_eq!(out.get("DisplayOffset"), Some(&Tag::Int(3)));
+        assert_eq!(out.get("CustomName"), Some(&Tag::String("Cart".into())));
+        // A compound without a position loads nothing.
+        let mut no_pos = merged.clone();
+        if let Tag::Compound(map) = &mut no_pos {
+            map.remove(&"Pos".into());
+            map.insert("DisplayOffset".into(), Tag::Int(9));
+        }
+        assert!(cart.load(&no_pos).is_none());
+        assert_eq!(display_offset(&cart), 3.0);
     }
 
     #[test]
