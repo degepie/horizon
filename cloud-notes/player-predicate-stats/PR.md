@@ -56,14 +56,31 @@ none
 
 ## Self-check
 
-`python3 tools/pr_ready.py --quick --base upstream/main` could not run here (see REPORT). Ran instead:
+**pr_ready** (`tools/pr_ready.py --quick --base upstream/main` on vm, against upstream/main at 63eccfc35, 1 min 46 s)
 
-- `cargo fmt -p horizon-client`: clean.
-- `cargo test -p horizon-client-lib --lib advancements::`: 29 passed, 1 ignored (needs prepared resources).
-  The 5 new tests are among them.
-- `cargo clippy -p horizon-client -p horizon-client-lib --all-targets`: no warnings in the changed files. The only
-  warnings are 6 pre-existing `manual !RangeInclusive::contains`, in `dragon.rs`, `camera.rs` and
-  `aquifer/noise_based.rs`.
-- `cargo test -p horizon-client --bins advancement`: see REPORT.
+| Check | Result |
+| --- | --- |
+| Scope | ⚠️ 5 files, +625 −18; 531 lines of code: over 500, split it if it can ship in parts |
+| Cargo.lock | ✅ unchanged |
+| Public tree | ✅ |
+| Python tests | ✅ 644 passed (1 min 23 s) |
+| rustfmt | ✅ (16 s) |
+| Rust | ⚠️ 1.97.0 is older than CI's stable (1.99): clippy may flag lints CI doesn't, update with `rustup update` |
+| clippy | ❌ failed; likely the old Rust above (29 s) |
+| tests: horizon-client, horizon-client-lib | ✅ 2682 passed (55 s) |
+| doc tests | ✅ 0 passed (5 s) |
+| content root tests | ➖ content root untouched |
+| tokens.css up to date | ➖ theme untouched |
+| launcher rustfmt | ➖ launcher untouched |
+| launcher clippy | ➖ launcher untouched |
+| launcher tests | ➖ launcher untouched |
+| Parity | ➖ not run (--quick): CI's parity job picks the affected harnesses |
+| Label | player-facing: `feature` if players get something new, no label for a fix (`release-now` if urgent) |
+
+clippy fails here only on a lint that is already on main: `manual_range_contains`, in
+`horizon-world/src/worldgen/aquifer/noise_based.rs:476`. This runner's Rust 1.97 flags it. The changed files have
+no clippy warnings (`cargo clippy -p horizon-client -p horizon-client-lib --all-targets` without `-D warnings`).
+New tests: `cargo test -p horizon-client-lib --lib advancements::` (29 passed). Gameplay advancement tests:
+`cargo test -p horizon-client --lib advancement` (10 passed).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
