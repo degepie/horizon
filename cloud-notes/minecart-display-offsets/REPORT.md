@@ -42,7 +42,8 @@ overrides still win.
 ## Verified
 - `cargo test -p horizon-client --lib minecarts::`: 18 passed, including the updated
   `display_offset_matches_vanilla_for_each_cart_kind` and `display_offset_is_not_saved_at_its_default`.
-- `cargo fmt`. clippy and the touched crates' tests come from `pr_ready.py --quick` (in PR.md).
+- `pr_ready.py --quick --base upstream/main` on Rust 1.99 (after `rustup update`; 1.97 flagged an unrelated
+  lint in `horizon-world`): fmt, clippy, 896 horizon-client tests and 644 Python tests pass. Block in PR.md.
 
 ## Not verified (needs your machines)
 - The values in the jar (table above).

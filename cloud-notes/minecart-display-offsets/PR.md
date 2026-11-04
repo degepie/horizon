@@ -41,6 +41,26 @@ none
 
 ## Self-check
 
-SELF_CHECK_PLACEHOLDER
+**pr_ready** (`tools/pr_ready.py --quick --base upstream/main` on vm, against upstream/main at 1f90d6f9a, 10 min 52 s)
+
+| Check | Result |
+| --- | --- |
+| Scope | ✅ 4 files, +165 −5 |
+| Cargo.lock | ✅ unchanged |
+| Public tree | ✅ |
+| Python tests | ✅ 644 passed (1 min 40 s) |
+| rustfmt | ✅ (18 s) |
+| clippy | ✅ (5 min 45 s) |
+| tests: horizon-client | ✅ 896 passed (4 min 46 s) |
+| doc tests | ✅ 0 passed (3 s) |
+| content root tests | ➖ content root untouched |
+| tokens.css up to date | ➖ theme untouched |
+| launcher rustfmt | ➖ launcher untouched |
+| launcher clippy | ➖ launcher untouched |
+| launcher tests | ➖ launcher untouched |
+| Parity | ➖ not run (--quick): CI's parity job picks the affected harnesses |
+| Label | player-facing: `feature` if players get something new, no label for a fix (`release-now` if urgent) |
+
+Scope counts the three `cloud-notes/` files too; the code change is `minecarts.rs` only (+32 −5).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
