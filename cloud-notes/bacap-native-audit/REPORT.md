@@ -96,8 +96,8 @@ So BACAP is not playable natively yet. It is about 5 PRs away from "mostly right
 PRs that would close the most advancements (ranked by advancements affected):
 
 1. **PlayerPredicate `stats` / `advancements` / `level` (+ `recipes`)**: stops 111 false grants (item 1), plus 11 more from item 2a (a few lines in `inventory_changed`). This one has the highest impact.
-2. **Merge #9494 + projectile `nbt`**: unblocks 44 (41 mob/player + 3 arrow `weapon`).
-3. **Merge #9403 + structure tags**: unblocks up to 109 (item/block 45, entity 41, damage 27, biome 2, structure 9; overlapping).
+2. **Merge #9403 + structure tags**: unblocks up to 109 (item/block 45, entity 41, damage 27, biome 2, structure 9; overlapping).
+3. **Merge #9494 + projectile `nbt`**: unblocks 44 (41 mob/player + 3 arrow `weapon`).
 4. **Fire `entity_killed_player`**: unblocks 17 (68 criteria). A small PR.
 5. **Item predicates over the real stack** (`stored_enchantments`, `potion_contents`, exact `components`, …) **+ re-run `inventory_changed` on component changes**: stops about 50 false grants and fixes 53 late grants. Merge #9496 first, since it touches the same function.
 
