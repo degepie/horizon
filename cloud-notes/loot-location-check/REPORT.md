@@ -43,7 +43,10 @@ caller: no origin position, no offsets, no other field, no biome tags (LootData 
 - Unit tests, one per predicate field (`location_predicate::tests`), and the loot wiring
   (`loot::location_check_tests`: no origin fails, offsets move position and block, full predicate,
   biome tag through loot data tags, biome-only view fails what it cannot tell).
-- Results of fmt / clippy / tests / pr_ready: see PR.md "Self-check".
+- `cargo fmt` clean; `cargo test -p horizon-world --lib` 360 ok; `cargo test -p horizon-client -p horizon-client-lib --lib`
+  892 + 1716 ok; pr_ready --quick: all green except clippy, which fails only on a pre-existing
+  `manual_range_contains` in untouched `worldgen/aquifer/noise_based.rs` (local Rust 1.97 < CI's 1.99; not updated
+  to save disk). Nothing flagged in changed files.
 
 ## Not verified (no jar here)
 

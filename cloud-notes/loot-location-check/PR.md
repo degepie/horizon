@@ -39,6 +39,30 @@ none
 
 ## Self-check
 
-SELF_CHECK_PLACEHOLDER
+**pr_ready** (`tools/pr_ready.py --quick --base upstream/main` on vm, against upstream/main at 1989b1b59, 2 min 12 s)
+
+| Check | Result |
+| --- | --- |
+| Scope | ⚠️ 13 files, +926 −145; 941 lines of code: over 500, split it if it can ship in parts |
+| Cargo.lock | ✅ unchanged |
+| Public tree | ✅ |
+| Python tests | ✅ 644 passed (1 min 16 s) |
+| rustfmt | ✅ (13 s) |
+| Rust | ⚠️ 1.97.0 is older than CI's stable (1.99): clippy may flag lints CI doesn't, update with `rustup update` |
+| clippy | ❌ failed; likely the old Rust above (30 s) |
+| tests: horizon-client, horizon-client-lib, horizon-world | ✅ 3127 passed (1 min 22 s) |
+| doc tests | ✅ 0 passed (7 s) |
+| content root tests | ➖ content root untouched |
+| tokens.css up to date | ➖ theme untouched |
+| launcher rustfmt | ➖ launcher untouched |
+| launcher clippy | ➖ launcher untouched |
+| launcher tests | ➖ launcher untouched |
+| Parity | ➖ not run (--quick): CI's parity job picks the affected harnesses |
+| Label | player-facing: `feature` if players get something new, no label for a fix (`release-now` if urgent) |
+
+clippy ❌ above is `crates/horizon-world/src/worldgen/aquifer/noise_based.rs:476` (`manual_range_contains`), a file
+this branch does not touch, flagged by this session's Rust 1.97; `cargo clippy -p horizon-world -p horizon-client
+--all-targets` reports nothing in the changed files (its other warnings are the same lint in untouched
+`dragon.rs` and `camera.rs`). Scope counts the `cloud-notes/` files; the code diff is ~560 lines, about half tests.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
