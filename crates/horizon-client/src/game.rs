@@ -30,6 +30,29 @@ macro_rules! world_stations {
         }
     };
 }
+/// One registry's tags of the world's packs (`WorldTables::pack_tags`),
+/// `None` for a world without packs: a field-level borrow.
+macro_rules! world_pack_tags {
+    ($s:expr, $registry:expr) => {
+        $s.world_tables
+            .as_ref()
+            .and_then(|t| t.pack_tags.get($registry))
+    };
+}
+/// The tags of one registry the world plays with: its packs' over the
+/// game's own (`Game::entity_tags`, `Game::biome_tags`, `Game::damage_tags`),
+/// as a field-level borrow.
+macro_rules! world_tags {
+    ($s:expr, entity_type) => {
+        world_pack_tags!($s, "entity_type").unwrap_or(&$s.res.mob_data().entity_tags)
+    };
+    ($s:expr, biome) => {
+        world_pack_tags!($s, "worldgen/biome").unwrap_or(&$s.res.mob_data().biome_tags)
+    };
+    ($s:expr, damage_type) => {
+        world_pack_tags!($s, "damage_type").unwrap_or(&$s.res.stations().enchantments.damage_tags)
+    };
+}
 /// The biome table the world plays with (`Game::biomes`), as a field-level
 /// borrow: the world's packs' over the game's own.
 macro_rules! world_biomes {
@@ -19886,6 +19909,29 @@ impl Game<'_> {
             Some(t) => &t.stations,
             None => self.res.stations(),
         }
+    }
+    /// The entity type tags the world plays with: its packs' over the
+    /// game's own (`TagLoader.loadTagsForExistingRegistries`).
+    fn entity_tags(&self) -> &HashMap<String, HashSet<String>> {
+        world_tags!(self, entity_type)
+    }
+    /// The biome tags the world plays with, as [`Game::entity_tags`].
+    fn biome_tags(&self) -> &HashMap<String, HashSet<String>> {
+        world_tags!(self, biome)
+    }
+    /// The damage type tags the world plays with, as [`Game::entity_tags`].
+    fn damage_tags(&self) -> &HashMap<String, HashSet<String>> {
+        world_tags!(self, damage_type)
+    }
+    fn entity_has(&self, tag: &str, entity: &str) -> bool {
+        self.entity_tags()
+            .get(tag)
+            .is_some_and(|t| t.contains(entity))
+    }
+    fn biome_has(&self, tag: &str, biome: &str) -> bool {
+        self.biome_tags()
+            .get(tag)
+            .is_some_and(|t| t.contains(biome))
     }
     /// The world's packs' content files, none without packs.
     /// The biome table the world plays with, `None` before a world opens.

@@ -65,7 +65,7 @@ impl Game<'_> {
         if (ticks as i32) < (component.delay_seconds * 20.0).round() as i32 {
             return None;
         }
-        let tags = &self.stations().enchantments.damage_tags;
+        let tags = self.damage_tags();
         let matches = |spec: &str| match spec.strip_prefix('#') {
             Some(tag) => tags.get(tag).is_some_and(|t| t.contains(damage_type)),
             None => spec == damage_type,

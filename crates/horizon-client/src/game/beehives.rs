@@ -40,12 +40,7 @@ impl HiveHost for GameHive<'_, '_> {
     }
     fn load(&mut self, tag: &Tag) -> Option<Mob> {
         let kind = horizon_client::entity_nbt::kind(tag)?;
-        if !self
-            .game
-            .res
-            .mob_data()
-            .entity_has("minecraft:beehive_inhabitors", &kind)
-        {
+        if !self.game.entity_has("minecraft:beehive_inhabitors", &kind) {
             return None;
         }
         let id = self.game.load_mob(tag.clone(), None)?;

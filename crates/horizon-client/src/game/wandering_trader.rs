@@ -142,11 +142,7 @@ impl Game<'_> {
                 .name
                 .clone()
         });
-        if biome.is_some_and(|b| {
-            self.res
-                .mob_data()
-                .biome_has("minecraft:without_wandering_trader_spawns", &b)
-        }) {
+        if biome.is_some_and(|b| self.biome_has("minecraft:without_wandering_trader_spawns", &b)) {
             return false;
         }
         let at = [

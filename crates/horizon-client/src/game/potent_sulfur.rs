@@ -178,7 +178,7 @@ impl Game<'_> {
             collision: self.collision,
             player: None,
         };
-        let tags = &self.res.stations().enchantments.entity_tags;
+        let tags = world_tags!(self, entity_type);
         for mob in self
             .mobs
             .iter_mut()
@@ -309,7 +309,7 @@ impl Game<'_> {
         let area = launch_area(pos, height);
         let limit = f64::from(0.3f32) + f64::from(water_blocks) * 0.1;
         let push = f64::from(0.2f32);
-        let tags = &self.res.stations().enchantments.entity_tags;
+        let tags = world_tags!(self, entity_type);
         let immune = tags.get("minecraft:not_affected_by_geysers");
         for mob in self
             .mobs

@@ -1269,9 +1269,7 @@ pub(super) fn in_powder_snow(m: &Mob, w: &MobWorld) -> bool {
 /// `LivingEntity.canFreeze`: not a `#freeze_immune_entity_types` mob and no
 /// worn piece in `#freeze_immune_wearables`.
 fn can_freeze(m: &Mob, w: &MobWorld) -> bool {
-    if w.data
-        .entity_has("minecraft:freeze_immune_entity_types", &m.kind.id)
-    {
+    if w.entity_has("minecraft:freeze_immune_entity_types", &m.kind.id) {
         return false;
     }
     let immune = w

@@ -374,8 +374,7 @@ impl Game<'_> {
             return BiomeFacts::default();
         };
         let b = world_biomes!(self).get(chunk.biome(x, y, z));
-        let tags = self.res.mob_data();
-        let has = |t: &str| tags.biome_has(t, &b.name);
+        let has = |t: &str| self.biome_has(t, &b.name);
         let climate = if has("minecraft:spawns_warm_variant_farm_animals") {
             Climate::Warm
         } else if has("minecraft:spawns_cold_variant_farm_animals") {
@@ -847,6 +846,8 @@ impl Game<'_> {
             thundering: weather && thunder > 0.9,
             nether: self.dim == Dim::Nether,
             block_tags: &self.items().block_tags,
+            entity_tags: self.entity_tags(),
+            biome_tags: self.biome_tags(),
             landing: &self.motion.landing,
             biomes: world_biomes!(self),
             mob_griefing: self.ui.rules.bool("mob_griefing"),
@@ -3632,10 +3633,7 @@ impl Game<'_> {
         // rocket (its `fireworks` type is not in the tag).
         let projectile = rocket
             || self
-                .res
-                .stations()
-                .enchantments
-                .damage_tags
+                .damage_tags()
                 .get("minecraft:is_projectile")
                 .is_some_and(|t| t.contains(damage_type));
         let blocking = self.player_blocking(from, damage_type, false);
@@ -5422,10 +5420,7 @@ impl Game<'_> {
         } else {
             false
         };
-        let cannot = self
-            .res
-            .mob_data()
-            .entity_has("minecraft:cannot_be_age_locked", &m.kind.id);
+        let cannot = self.entity_has("minecraft:cannot_be_age_locked", &m.kind.id);
         horizon_client::mobs::ai::can_use_golden_dandelion(
             item,
             baby,
@@ -8075,6 +8070,8 @@ mod pearl_tests {
             thundering: false,
             nether: false,
             block_tags: &items.block_tags,
+            entity_tags: &data.entity_tags,
+            biome_tags: &data.biome_tags,
             landing: &motion.landing,
             biomes: &biomes,
             mob_griefing: true,

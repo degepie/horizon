@@ -2774,6 +2774,11 @@ pub struct MobWorld<'a> {
     pub thundering: bool,
     pub nether: bool,
     pub block_tags: &'a HashMap<String, std::collections::HashSet<String>>,
+    /// The entity type and biome tags the world plays with: its data packs'
+    /// over the game's own (`TagLoader.loadTagsForExistingRegistries`), or
+    /// [`MobData`]'s without packs.
+    pub entity_tags: &'a HashMap<String, std::collections::HashSet<String>>,
+    pub biome_tags: &'a HashMap<String, std::collections::HashSet<String>>,
     /// Each block's `fallOn` rule (the player's landing registry).
     pub landing: &'a horizon_world::block_landing::BlockLandingRegistry,
     pub biomes: &'a crate::biome::Biomes,

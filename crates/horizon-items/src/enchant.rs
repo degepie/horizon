@@ -179,8 +179,14 @@ impl Enchantments {
                 })
                 .collect()
         };
-        let entity_tags = unordered(read_tag_dir(&data.join("tags/entity_type")));
-        let damage_tags = unordered(read_tag_dir(&data.join("tags/damage_type")));
+        // The entity and damage type tags their conditions test, with the
+        // world's packs over the game's own (`TagLoader.loadTagsForExistingRegistries`).
+        let tags_of = |kind: &str| -> HashMap<String, HashSet<String>> {
+            crate::items::load_tags(root, kind, overlay)
+                .unwrap_or_else(|_| unordered(read_tag_dir(&data.join(format!("tags/{kind}")))))
+        };
+        let entity_tags = tags_of("entity_type");
+        let damage_tags = tags_of("damage_type");
         // The registry lists entries sorted by id, like the data-pack loader.
         let mut files: BTreeMap<String, Value> = BTreeMap::new();
         // The folder's own files, not its subfolders'.
@@ -1222,6 +1228,82 @@ pub mod tests {
             e.full_name_in(Some(&ru), "minecraft:mending", 1).0,
             "mending"
         );
+    }
+
+    /// An enchantment's `entity_properties` and `damage_source_properties`
+    /// conditions read the world's pack tags over the game's own
+    /// (`TagLoader.loadTagsForExistingRegistries`): a pack's member joins a
+    /// tag, a `replace` file drops the game's, and a pack's own tag exists.
+    #[test]
+    fn conditions_read_the_world_pack_tags() {
+        let root =
+            std::env::temp_dir().join(format!("horizon-enchant-pack-tags-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let tags = root.join("data/minecraft/tags");
+        for (path, json) in [
+            (
+                "entity_type/sensitive_to_smite.json",
+                r#"{"values":["minecraft:zombie"]}"#,
+            ),
+            (
+                "damage_type/is_fire.json",
+                r#"{"values":["minecraft:in_fire","minecraft:lava"]}"#,
+            ),
+        ] {
+            std::fs::create_dir_all(tags.join(path).parent().unwrap()).unwrap();
+            std::fs::write(tags.join(path), json).unwrap();
+        }
+        let files: Vec<(String, Vec<Vec<u8>>)> = vec![
+            (
+                "tags/minecraft:entity_type/sensitive_to_smite".into(),
+                vec![br#"{"values":["mypack:ghoul"]}"#.to_vec()],
+            ),
+            (
+                "tags/minecraft:damage_type/is_fire".into(),
+                vec![br#"{"replace":true,"values":["mypack:acid"]}"#.to_vec()],
+            ),
+            (
+                "tags/mypack:entity_type/ghosts".into(),
+                vec![br##"{"values":["#minecraft:sensitive_to_smite"]}"##.to_vec()],
+            ),
+        ];
+        let packed =
+            Enchantments::load_with(&root, &horizon_world::loot::PackOverlay { files: &files });
+        let own = Enchantments::load(&root);
+        let _ = std::fs::remove_dir_all(&root);
+        let mut r = LegacyRandom::new(1);
+        let entity = |tag: &str| json!({"condition": "minecraft:entity_properties", "entity": "this", "predicate": {"minecraft:entity_type": tag}});
+        let hit_by = |e: &Enchantments, entity_type: &str, tag: &str| {
+            let ctx = EffectContext {
+                this: Some(entity_type),
+                ..Default::default()
+            };
+            e.condition(&entity(tag), 1, &ctx, &mut LegacyRandom::new(1))
+        };
+        for (e, ghoul) in [(&packed, true), (&own, false)] {
+            assert!(hit_by(
+                e,
+                "minecraft:zombie",
+                "#minecraft:sensitive_to_smite"
+            ));
+            assert_eq!(
+                hit_by(e, "mypack:ghoul", "#minecraft:sensitive_to_smite"),
+                ghoul
+            );
+            assert_eq!(hit_by(e, "minecraft:zombie", "#mypack:ghosts"), ghoul);
+        }
+        let fire = json!({"condition": "minecraft:damage_source_properties", "predicate": {"tags": [{"id": "minecraft:is_fire", "expected": true}]}});
+        let burns = |e: &Enchantments, damage: &str, r: &mut LegacyRandom| {
+            let ctx = EffectContext {
+                damage_type: Some(damage),
+                ..Default::default()
+            };
+            e.condition(&fire, 1, &ctx, r)
+        };
+        assert!(burns(&packed, "mypack:acid", &mut r));
+        assert!(!burns(&packed, "minecraft:lava", &mut r));
+        assert!(burns(&own, "minecraft:lava", &mut r));
+        assert!(!burns(&own, "mypack:acid", &mut r));
     }
 }
 

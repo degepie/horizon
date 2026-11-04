@@ -297,10 +297,7 @@ impl Game<'_> {
         let mut positions: Vec<_> = self.be_anims.bells.keys().copied().collect();
         positions.sort_unstable();
         let raiders = self
-            .res
-            .stations()
-            .enchantments
-            .entity_tags
+            .entity_tags()
             .get("minecraft:raiders")
             .cloned()
             .unwrap_or_default();
@@ -411,10 +408,7 @@ impl Game<'_> {
             _ => Vec::new(),
         };
         let raiders = self
-            .res
-            .stations()
-            .enchantments
-            .entity_tags
+            .entity_tags()
             .get("minecraft:raiders")
             .cloned()
             .unwrap_or_default();

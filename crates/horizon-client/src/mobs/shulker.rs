@@ -225,9 +225,7 @@ fn block_space<'w, 'r>(m: &Mob, w: &'w MobWorld<'r>) -> BlockSpace<'w, 'r> {
         registry: w.registry,
         facts: w.facts,
         binding: w.collision,
-        powder_walkable: w
-            .data
-            .entity_has("minecraft:powder_snow_walkable_mobs", &m.kind.id),
+        powder_walkable: w.entity_has("minecraft:powder_snow_walkable_mobs", &m.kind.id),
     }
 }
 fn entities_clear(m: &Mob, w: &MobWorld, bounds: Aabb) -> bool {

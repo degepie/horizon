@@ -1194,6 +1194,8 @@ pub fn main() -> horizon_client::Result<()> {
                     thundering: s.thunder,
                     nether: false,
                     block_tags: &items.block_tags,
+                    entity_tags: &data.entity_tags,
+                    biome_tags: &data.biome_tags,
                     landing: &motion.landing,
                     biomes: &biomes,
                     mob_griefing: true,

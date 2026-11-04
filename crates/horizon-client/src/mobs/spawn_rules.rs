@@ -564,8 +564,7 @@ impl SpawnLevel for super::MobWorld<'_> {
             return false;
         };
         let biome = &self.biomes.get(chunk.biome(x, y, z)).name;
-        self.data
-            .biome_tags
+        self.biome_tags
             .get(tag.trim_start_matches('#'))
             .is_some_and(|members| members.contains(biome))
     }

@@ -858,14 +858,11 @@ impl Game<'_> {
                     return;
                 };
                 let inverted = self
-                    .res
-                    .stations()
-                    .enchantments
-                    .entity_tags
+                    .entity_tags()
                     .get("minecraft:inverted_healing_and_harm")
                     .is_some_and(|t| t.contains(&self.mobs[i].kind.id));
                 for (effect, duration, amp) in effects {
-                    let tags = &self.res.stations().enchantments.entity_tags;
+                    let tags = world_tags!(self, entity_type);
                     // A mod's `onEffectAdded` may have changed the mobs.
                     let Some(m) = self.mobs.iter_mut().find(|m| m.id == id) else {
                         return;
@@ -1476,7 +1473,7 @@ impl Game<'_> {
             inside.push((Victim::Player(p.who), p.position.x, p.position.z));
         }
         let effects = potion.effects.clone();
-        let tags = &self.stations().enchantments.entity_tags;
+        let tags = self.entity_tags();
         // Only mobs that at least one of the cloud's effects can affect are
         // taken (`allEffects.stream().anyMatch(entity::canBeAffected)`), so
         // the others neither become victims nor use up its radius.
@@ -1606,12 +1603,12 @@ impl Game<'_> {
                     return;
                 };
                 // Undead invert healing and harming.
-                let tags = &world_stations!(self).enchantments.entity_tags;
+                let tags = world_tags!(self, entity_type);
                 let inverted = tags
                     .get("minecraft:inverted_healing_and_harm")
                     .is_some_and(|t| t.contains(&self.mobs[i].kind.id));
                 for (id, duration, amp) in effects {
-                    let tags = &world_stations!(self).enchantments.entity_tags;
+                    let tags = world_tags!(self, entity_type);
                     // A mod's `onEffectAdded` may have changed the mobs.
                     let Some(m) = self.mobs.iter_mut().find(|m| m.id == mob) else {
                         return;
@@ -1946,7 +1943,7 @@ impl Game<'_> {
         // `LivingEntity`s, the players among them).
         self.for_each_player(|g| g.splash_on_player(def.effects, at, age, owner));
         // Mobs take the instant effects (undead invert healing and harming).
-        let undead = &self.stations().enchantments.entity_tags;
+        let undead = self.entity_tags();
         let mut hits = Vec::new();
         for (i, m) in self.mobs.iter().enumerate() {
             if m.alive()

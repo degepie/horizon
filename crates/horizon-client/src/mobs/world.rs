@@ -29,6 +29,12 @@ pub struct TargetInfo {
     pub passenger: bool,
 }
 impl MobWorld<'_> {
+    /// `EntityType.is(tag)` against the world's entity type tags.
+    pub fn entity_has(&self, tag: &str, entity: &str) -> bool {
+        self.entity_tags
+            .get(tag)
+            .is_some_and(|s| s.contains(entity))
+    }
     /// The biome's base temperature at a position.
     pub fn temperature(&self, x: i32, y: i32, z: i32) -> f32 {
         self.world
@@ -484,6 +490,8 @@ pub(crate) fn with_resource_test_world(
         thundering: false,
         nether: false,
         block_tags: &items.block_tags,
+        entity_tags: &data.entity_tags,
+        biome_tags: &data.biome_tags,
         landing: &motion.landing,
         biomes: &biomes,
         mob_griefing,
