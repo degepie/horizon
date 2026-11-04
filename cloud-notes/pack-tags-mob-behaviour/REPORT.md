@@ -59,7 +59,7 @@ game: `creatures.rs` biome_facts (farm-animal variants), golden dandelion (`cann
   `cargo test -p horizon-client-lib --no-default-features --lib mobs::`: 505 passed.
 - `cargo clippy -p horizon-items --all-targets`, `-p horizon-client --no-default-features --all-targets`: only
   pre-existing `manual_range_contains` warnings from the local 1.97 toolchain (none on changed lines).
-- `cargo fmt --all`: clean. pr_ready: see PR.md.
+- `cargo fmt --all`: clean. pr_ready --quick: all pass (2738 tests, 644 Python) except clippy on the untouched horizon-world aquifer lint (old toolchain); block in PR.md.
 
 ## Not verified (cloud: no `.local/`, no jar, no game)
 - No MobWorld/Game-level test: those need the prepared resources (`MobData::load`, `with_test_world` return early
